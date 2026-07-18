@@ -69,4 +69,17 @@ window.addEventListener('online',()=>$('#offline').classList.add('hidden'));wind
 let installPrompt;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#install').classList.remove('hidden')});
 $('#install').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#install').classList.add('hidden')}};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js');
-fetch('./questions.json').then(r=>r.json()).then(q=>{state.questions=q;render()}).catch(()=>app.innerHTML='<div class="empty">題庫載入失敗，請重新整理頁面。</div>');
+async function loadQuestions(attempt=1){
+  try {
+    const response=await fetch('./questions.json',{cache:'no-cache'});
+    if(!response.ok||!response.headers.get('content-type')?.includes('application/json'))throw new Error('Invalid question data');
+    const questions=await response.json();
+    if(!Array.isArray(questions)||questions.length<2000)throw new Error('Incomplete question data');
+    state.questions=questions;render();
+  } catch(error) {
+    if(attempt<3){setTimeout(()=>loadQuestions(attempt+1),attempt*1200);return}
+    app.innerHTML='<div class="empty"><p>題庫下載未完成，請確認網路後再試一次。</p><button class="primary" id="retryLoad">重新載入題庫</button></div>';
+    $('#retryLoad').onclick=()=>{app.innerHTML='<div class="loading">正在重新下載題庫⋯</div>';loadQuestions()};
+  }
+}
+loadQuestions();
