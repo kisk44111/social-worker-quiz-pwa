@@ -68,7 +68,11 @@ tabs.onclick=e=>{const b=e.target.closest('[data-tab]');if(b)root(b.dataset.tab)
 window.addEventListener('online',()=>$('#offline').classList.add('hidden'));window.addEventListener('offline',()=>$('#offline').classList.remove('hidden'));
 let installPrompt;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#install').classList.remove('hidden')});
 $('#install').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#install').classList.add('hidden')}};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js');
+if('serviceWorker'in navigator){
+  let reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!reloading){reloading=true;location.reload()}});
+  navigator.serviceWorker.register('./service-worker.js');
+}
 async function loadQuestions(attempt=1){
   try {
     const response=await fetch('./questions.json',{cache:'no-cache'});
