@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#4f46a5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="社工師題庫">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>社工師題庫</title>
+</head>
+<body>
+  <header class="topbar">
+    <button id="back" class="icon-btn hidden" aria-label="返回">‹</button>
+    <h1 id="title">社工師題庫</h1>
+    <button id="install" class="install hidden">安裝</button>
+  </header>
+  <main id="app"><div class="loading">正在載入 2,310 題題庫⋯</div></main>
+  <nav id="tabs" class="tabs" aria-label="主要功能">
+    <button data-tab="library" class="active"><span>▤</span>題庫</button>
+    <button data-tab="wrong"><span>↻</span>錯題</button>
+    <button data-tab="favorites"><span>★</span>收藏</button>
+    <button data-tab="stats"><span>▥</span>統計</button>
+  </nav>
+  <div id="offline" class="offline hidden">目前離線，題庫仍可正常使用</div>
+  <script src="app.js" defer></script>
+</body>
+</html>
