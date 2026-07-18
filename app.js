@@ -47,7 +47,7 @@ function renderSubject(){
 function openList(name,items,navigate=true){state.currentList=items;state.listTitle=name;if(navigate)push('list');else{state.stack.push({view:'library'});state.view='list';render()}}
 function renderList(name,items){
   title.textContent=name;
-  app.innerHTML=items.length?items.map((q,i)=>`<button class="row question-link ${q.type==='essay'?'essay':''}" data-i="${i}"><span class="badge">${q.type==='essay'?'申論':'第 '+q.number+' 題'}</span><p>${esc(q.prompt)}</p><div class="meta">${q.year}・第 ${q.session} 次・${esc(q.subject)}</div></button>`).join(''):'<div class="empty">目前沒有題目</div>';
+  app.innerHTML=items.length?items.map((q,i)=>`<button class="row question-link ${q.type==='essay'?'essay':''}" data-i="${i}"><span class="badge">${q.type==='essay'?'申論・含 AI 擬答':'第 '+q.number+' 題'}</span><p>${esc(q.prompt)}</p><div class="meta">${q.year}・第 ${q.session} 次・${esc(q.subject)}</div></button>`).join(''):'<div class="empty">目前沒有題目</div>';
   document.querySelectorAll('.question-link').forEach(b=>b.onclick=()=>{state.currentList=items;state.currentIndex=+b.dataset.i;state.selected=null;state.submitted=false;push('question')});
 }
 function renderQuestion(){
