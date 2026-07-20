@@ -19,6 +19,7 @@ function shuffle(items){const a=[...items];for(let i=a.length-1;i>0;i--){const j
 function push(view, data={}){state.stack.push({view:state.view});Object.assign(state,data);state.view=view;render()}
 function root(view){state.view=view;state.stack=[];state.selected=null;state.submitted=false;render()}
 function render(){
+  app.dataset.view=state.view;
   back.classList.toggle('hidden', !state.stack.length); tabs.classList.toggle('hidden', state.view==='question');
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===state.view));
   ({library:renderLibrary,wrong:()=>renderList('錯題複習',state.questions.filter(q=>state.wrong.has(q.id))),favorites:()=>renderList('收藏題目',state.questions.filter(q=>state.favorites.has(q.id))),stats:renderStats,subject:renderSubject,list:()=>renderList(state.listTitle,state.currentList),question:renderQuestion}[state.view]||renderLibrary)();
@@ -53,7 +54,7 @@ function renderList(name,items){
 function renderQuestion(){
   const q=state.currentList[state.currentIndex], letters=['A','B','C','D']; title.textContent=q.type==='essay'?'申論題':`第 ${state.currentIndex+1}／${state.currentList.length} 題`;
   const opts=q.options.map((o,i)=>{const l=letters[i];let cls=state.selected===l?'selected ':'';if(state.submitted&&l===q.answer)cls+='correct';else if(state.submitted&&l===state.selected)cls+='incorrect';return `<button class="row option ${cls}" data-letter="${l}" ${state.submitted?'disabled':''}><span class="letter">${l}</span><span>${esc(o)}</span></button>`}).join('');
-  const result=state.submitted?`<div class="result ${state.selected===q.answer?'good':'bad'}">${state.selected===q.answer?'✓ 答對了':'✕ 正確答案：'+esc(q.answer)}</div>${q.explanation?`<div class="answer-box"><h3>💡 詳解</h3><div>${esc(q.explanation)}</div><p class="muted">本詳解依考選部標準答案整理，非考選部官方逐題解析。</p></div>`:''}`:'';
+  const result=state.submitted?`<div class="result ${state.selected===q.answer?'good':'bad'}">${state.selected===q.answer?'✓ 答對了':'✕ 正確答案：'+esc(q.answer)}</div>${q.explanation?`<div class="answer-box"><h3>💡 完整詳解</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation)}</div><p class="muted">本詳解依考選部標準答案逐項整理，非考選部官方解析。</p></div>`:''}`:'';
   app.innerHTML=`<div class="meta">${q.year} 第 ${q.session} 次・${esc(q.subject)}<button class="star" id="star" aria-label="收藏">${state.favorites.has(q.id)?'★':'☆'}</button></div><p class="question-text">${esc(q.prompt)}</p>${q.type==='essay'?`<div class="answer-box"><h3>AI 擬答方向</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation||'擬答整理中')}</div><p class="muted">本內容由 AI 依題幹生成，非考選部官方答案。</p></div><div class="answer-box reference-answer"><h3>AI 參考答案</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.referenceAnswer||'參考答案整理中')}</div><p class="muted">參考答案依上述擬答方向生成；法規、數據與專有名詞請以考試時點的官方資料及教科書核對。</p></div>`:opts+result+`<button id="submit" class="primary" ${!state.selected&&!state.submitted?'disabled':''}>${state.submitted?(state.currentIndex+1<state.currentList.length?'下一題':'完成練習'):'確認答案'}</button>`}`;
   $('#star').onclick=()=>{state.favorites.has(q.id)?state.favorites.delete(q.id):state.favorites.add(q.id);save();renderQuestion()};
   document.querySelectorAll('.option').forEach(b=>b.onclick=()=>{if(!state.submitted){state.selected=b.dataset.letter;renderQuestion()}});

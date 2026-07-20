@@ -1,0 +1,19 @@
+@media(min-width:1000px){
+  body{padding:82px 32px 36px 252px}
+  .topbar{left:220px;height:70px;padding-top:0;box-shadow:0 1px 12px #0001}
+  .topbar h1{font-size:22px}.topbar .icon-btn{left:28px}
+  main{max-width:1180px;padding:28px 36px;margin:0 auto}
+  .tabs{top:0;right:auto;width:220px;height:100vh;padding:90px 16px 24px;display:flex;flex-direction:column;gap:8px;border-top:0;border-right:1px solid var(--line)}
+  .tabs button{height:64px;border-radius:14px;text-align:left;padding:0 18px;font-size:15px;display:flex;align-items:center;gap:14px}
+  .tabs button:hover{background:#7167d818}.tabs button.active{background:#7167d824}
+  .tabs span{display:inline-block;font-size:25px;margin:0;width:30px;text-align:center}
+  .hero{padding:30px}.hero h2{font-size:27px}.search{max-width:none;padding:15px 18px}
+  main[data-view="library"] .subject,main[data-view="subject"] .exam{display:inline-block;vertical-align:top;width:calc(50% - 8px);min-height:82px}
+  main[data-view="library"] .subject:nth-of-type(even),main[data-view="subject"] .exam:nth-of-type(even){margin-right:12px}
+  main[data-view="list"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;align-items:start}
+  main[data-view="list"] .row{height:100%;margin:0}
+  main[data-view="question"]{max-width:900px}
+  main[data-view="question"] .question-text{font-size:22px;line-height:1.65}
+  main[data-view="question"] .option{padding:18px}
+  .stat-grid{grid-template-columns:repeat(4,1fr)}
+}
