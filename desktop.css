@@ -10,3 +10,16 @@
 }
 @media(min-width:1450px){.subject-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.subject:last-child{grid-column:auto}.subject:first-child{grid-column:span 2}.question-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(min-width:1000px){.tabs.hidden{display:flex!important}.search-wrap>span{display:block}}
+@media(min-width:1000px){
+  .option>span:last-child{font-size:16px;line-height:1.65;font-weight:550;color:#292633}
+  .option:not(:disabled):hover{background:#eeecf8;color:#24212e;border-color:#8177c5;box-shadow:0 5px 16px #5146a518}
+  .option:not(:disabled):hover>span:last-child{color:#24212e}
+}
+@media(min-width:1000px) and (prefers-color-scheme:dark){
+  .option>span:last-child{color:#f2f0f7}
+  .option:not(:disabled):hover{background:#302c3b;color:#fff;border-color:#8d83d1;box-shadow:0 5px 18px #0005}
+  .option:not(:disabled):hover>span:last-child{color:#fff}
+  .option:not(:disabled):hover .letter{background:#5d5682;color:#fff}
+  .option.selected,.option.selected:hover{background:#373249;border-color:#9a90df}
+  .option.selected>span:last-child,.option.selected:hover>span:last-child{color:#fff}
+}
