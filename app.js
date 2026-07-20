@@ -74,7 +74,7 @@ function renderQuestion(){
 }
 function renderStats(){
   title.textContent='學習統計';const accuracy=state.answered?Math.round(state.correct/state.answered*100):0;
-  app.innerHTML=`<div class="stat-grid"><div class="card stat"><strong>${state.answered}</strong>累計作答</div><div class="card stat"><strong>${state.correct}</strong>答對題數</div><div class="card stat"><strong>${accuracy}%</strong>正確率</div><div class="card stat"><strong>${state.wrong.size}</strong>待複習錯題</div></div><div class="section-title">資料說明</div><div class="card">收錄 2021–2026 年五科考選部試題，共 ${state.questions.length.toLocaleString()} 題。選擇題答案採官方標準答案；申論題僅收錄題目。<p class="muted">作答、錯題及收藏資料只保存在這台裝置上。</p></div>`;
+  app.innerHTML=`<div class="stat-grid"><div class="card stat"><strong>${state.answered}</strong>累計作答</div><div class="card stat"><strong>${state.correct}</strong>答對題數</div><div class="card stat"><strong>${accuracy}%</strong>正確率</div><div class="card stat"><strong>${state.wrong.size}</strong>待複習錯題</div></div><div class="section-title">資料說明</div><div class="card">收錄 2021–2026 年五科考選部試題，共 ${state.questions.length.toLocaleString()} 題。選擇題答案採官方標準答案；申論題提供 AI 擬答方向與參考答案。<p class="muted">作答、錯題及收藏資料只保存在這台裝置上。</p></div>`;
 }
 back.onclick=()=>{const last=state.stack.pop();state.view=last?.view||'library';state.selected=null;state.submitted=false;render()};
 tabs.onclick=e=>{const b=e.target.closest('[data-tab]');if(b)root(b.dataset.tab)};
