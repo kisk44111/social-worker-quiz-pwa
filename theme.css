@@ -1,4 +1,4 @@
-:root{color-scheme:light dark}
+:root{color-scheme:light dark}.search-wrap>span{display:none}
 @media(prefers-color-scheme:dark){
   :root{color:#f2f0f7;background:#111016;--indigo:#a9a0ff;--line:#3b3845}
   body{background:#111016;color:#f2f0f7}

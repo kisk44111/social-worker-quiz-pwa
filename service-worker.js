@@ -1,6 +1,6 @@
 const CACHE = 'social-worker-quiz-v8';
 const DATA_CACHE = 'social-worker-quiz-data-v8';
-const ASSETS = ['./','./index.html','./styles.css?build=8','./theme.css?build=8','./desktop.css?build=8','./responsive-fixes.css?build=8','./app.js?build=8','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const ASSETS = ['./','./index.html','./styles.css?build=8','./theme.css?build=8','./desktop.css?build=8','./app.js?build=8','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => ![CACHE,DATA_CACHE].includes(k)).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
