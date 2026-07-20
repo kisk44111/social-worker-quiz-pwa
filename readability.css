@@ -15,7 +15,8 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .tabs button:hover span{color:#5146a5}.tabs button.active{color:#443a98;background:#ece9fa;border-color:#ddd7f5;box-shadow:inset 3px 0 #5b50b6}
   .tabs button.active span{color:#5146a5}.sidebar-foot{color:#575363;font-size:12px;line-height:1.5}
   .topbar h1{color:#5b5766;font-size:18px}.hero p{font-size:16px;line-height:1.6}.eyebrow{font-size:12px;line-height:1.4}
-  .quick-card p,.subject p,.exam p,.question-link .meta{font-size:14px}.subject-copy h3,.quick-card h3{line-height:1.45}
+  .desktop-toolbar h2{font-size:25px;line-height:1.35}.desktop-toolbar>div>p,.section-heading p{font-size:15px;line-height:1.55}.section-heading .section-title{font-size:21px}
+  .quick-card p,.subject p,.exam p,.question-link .meta{font-size:15px}.subject-copy h3,.quick-card h3{line-height:1.45}.quick-card h3{font-size:19px}.subject-copy h3{font-size:18px}.subject-kind{font-size:12px}.subject-index{font-size:13px}
   .question-preview p{font-size:15px;line-height:1.65}.question-text{font-size:22px;line-height:1.75}.question-kicker,.question-context,.progress-card{font-size:14px}
   .option{min-height:62px}.option>span:last-child{font-size:17px;line-height:1.65;font-weight:560;letter-spacing:.005em}.letter{flex-basis:34px;height:34px;font-size:14px}
   .answer-column .answer-box,.essay-answers .answer-box{font-size:16px;line-height:1.8}.answer-column .answer-box>div,.essay-answers .answer-box>div{font-size:16px}.answer-box h3{font-size:18px}.muted{font-size:13px}
@@ -35,12 +36,15 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
 
 @media(prefers-color-scheme:dark){
   :root{--text:#f4f2f8;--text-soft:#c5c1ce;--surface:#1d1b24;--soft:#2b2835;--muted:#c5c1ce;--surface-raised:#1d1b24;--nav-bg:rgba(24,22,31,.98)}
-  .topbar{background:rgba(17,16,22,.96);border-color:#3b3845}.topbar .icon-btn{background:#25222d;color:#c7c0ff;border-color:#454050}
+  body{background:linear-gradient(135deg,#111016 0%,#17151e 100%);color:#f4f2f8}.topbar{background:rgba(17,16,22,.96);border-color:#3b3845}.topbar .icon-btn{background:#25222d;color:#c7c0ff;border-color:#454050}
   .tabs,.tabs.hidden{background:var(--nav-bg);color:var(--text);border-color:#3b3845}
   .sidebar-brand strong{color:#f7f5fb}.sidebar-brand small,.sidebar-foot{color:#c3bfcb}.nav-label{color:#a7a2b1}
   .tabs button{color:#c4bfcd}.tabs button span{color:#b8b2c2}.tabs button:hover{color:#fff;background:#302c3c;border-color:#474158}.tabs button:hover span{color:#d0caff}
   .tabs button.active{color:#fff;background:#39334e;border-color:#554d70;box-shadow:inset 3px 0 #a99fff}.tabs button.active span{color:#c4bcff}
-  .topbar h1{color:#d4d0dc}.section-title{color:#d1ccd9}.row p,.meta,.muted{color:var(--text-soft)}
+  .topbar h1{color:#d4d0dc}.desktop-toolbar h2,.section-heading .section-title,.list-summary h2{color:#f5f3f8}.desktop-toolbar>div>p,.section-heading p,.desktop-only{color:#c5c1ce}.section-title{color:#d1ccd9}.row p,.meta,.muted{color:var(--text-soft)}
+  .card,.row,.answer-box,.search,.question-panel,.progress-card{background:#1f1c26;color:#f4f2f8;border-color:#403b49;box-shadow:0 8px 24px #0003}.quick-card.primary-quick{background:linear-gradient(135deg,#29243b,#242031);border-color:#514970}.quick-card:not(.primary-quick){background:#1f1c26}.quick-card .eyebrow,.subject-kind,.badge{color:#c7c0ff}.quick-card h3,.subject-copy h3,.exam h3{color:#faf9fc}.quick-card p,.subject-copy p,.exam p{color:#c9c5d0}
+  .search{background:#1f1c26;color:#f5f3f8}.search::placeholder{color:#aaa5b2;opacity:1}.search-wrap>span{color:#c4bfcd}
+  .subject{background:#1f1c26}.subject:hover,.quick-card:hover,.exam:hover,.question-link:hover{background:#292531;border-color:#625a77}.subject-tail strong{color:#b9b0ff}.subject-tail span,.subject-tail i,.subject-index{color:#b9b4c3}
   .progress-card,.question-context span,.answer-column .result{background:#1d1b24;color:#f4f2f8;border-color:#3b3845}.progress-card p{color:#c5c1ce}.progress-heading span{color:#e5e1ea}
   .option>span:last-child{color:#f4f2f8}.option:not(:disabled):hover{background:#342f40;color:#fff;border-color:#958ada}.option:not(:disabled):hover>span:last-child{color:#fff}
   .option.selected,.option.selected:hover{background:#3d3652;border-color:#a399e5}.option.selected>span:last-child{color:#fff}

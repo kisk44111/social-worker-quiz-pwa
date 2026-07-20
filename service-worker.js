@@ -1,6 +1,6 @@
-const CACHE = 'social-worker-quiz-v10';
-const DATA_CACHE = 'social-worker-quiz-data-v10';
-const ASSETS = ['./','./index.html','./styles.css?build=9','./theme.css?build=9','./desktop.css?build=9','./readability.css?build=10','./app.js?build=10','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE = 'social-worker-quiz-v11';
+const DATA_CACHE = 'social-worker-quiz-data-v11';
+const ASSETS = ['./','./index.html','./styles.css?build=9','./theme.css?build=9','./desktop.css?build=9','./readability.css?build=11','./app.js?build=11','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => ![CACHE,DATA_CACHE].includes(k)).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
