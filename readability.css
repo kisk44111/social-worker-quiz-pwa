@@ -1,12 +1,15 @@
-/* Final accessibility and readability layer — build 10 */
+/* Final accessibility and readability layer — build 12 */
 :root{--text:#201e28;--text-soft:#625f6e;--surface-raised:#fff;--nav-bg:rgba(255,255,255,.96)}
 html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body,button,input{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif}
 button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px solid color-mix(in srgb,var(--indigo) 42%,transparent);outline-offset:2px}
 .primary:disabled{opacity:.62;color:rgba(255,255,255,.78)}
+.exam-switcher{display:grid;gap:10px;margin-bottom:18px}.exam-switcher>div{padding:3px 2px}.exam-switcher>div strong{font-size:18px}.exam-choice{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:inherit;text-align:left}.exam-choice>span:nth-child(2){flex:1}.exam-choice b,.exam-choice small{display:block}.exam-choice b{font-size:15px;line-height:1.4}.exam-choice small{color:var(--text-soft);font-size:12px;margin-top:3px}.exam-choice i{font-style:normal;color:var(--muted);font-weight:800}.exam-choice-icon{display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:12px;background:#ece9fa;color:#4f46a5;font-size:17px;font-weight:900}.exam-choice.public .exam-choice-icon{background:#e1f3ee;color:#146b5c}.exam-choice.active{border:2px solid #5b50b6;background:#f1effb;box-shadow:0 6px 20px #5146a514}.exam-choice.public.active{border-color:#258473;background:#eaf7f3}.exam-choice.active i{color:#4f46a5}.exam-choice.public.active i{color:#167262}.hero.public{background:radial-gradient(circle at 90% 10%,#85d7c455,transparent 35%),linear-gradient(135deg,#155e57,#278c7d)}.subject-hero.public{background:linear-gradient(135deg,#155e57,#278c7d)}.exam-context-badge{display:inline-block;margin-bottom:16px;padding:8px 12px;border-radius:10px;background:var(--soft);color:var(--indigo);font-size:13px;font-weight:800}
+.track-chip{display:inline-flex;align-items:center;width:max-content;margin:0 9px 7px 0;padding:6px 10px;border-radius:999px;background:#ece9fa;color:#4f46a5;font-size:12px;font-weight:850;line-height:1}.track-chip.public{background:#dff3ed;color:#12695a}.question-context .track-chip{border-color:#cbc5ef;background:#ece9fa;color:#4f46a5}.question-context .track-chip.public{border-color:#a9dacf;background:#e1f3ee;color:#12695a}
 .row p,.meta,.muted{color:var(--text-soft);line-height:1.55}.badge{line-height:1.45}.answer-box{font-size:15px}.answer-box>div{font-size:15px}
 
 @media(min-width:1000px){
+  .exam-switcher{grid-template-columns:minmax(180px,.75fr) repeat(2,minmax(260px,1fr));align-items:center;padding:16px 18px;border:1px solid var(--line);border-radius:20px;background:var(--surface);box-shadow:0 7px 24px #302a5a0a;margin-bottom:22px}.exam-choice{min-height:76px;transition:.18s ease}.exam-choice:hover{transform:translateY(-1px);border-color:#8177c5}.exam-choice b{font-size:16px}.exam-choice small{font-size:13px}.public-subject-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.public-subject-grid .subject:last-child,.public-subject-grid .subject:first-child{grid-column:auto}
   .tabs,.tabs.hidden{background:var(--nav-bg);color:var(--text)}
   .sidebar-brand{padding-top:2px}.sidebar-brand strong{color:var(--text);font-size:18px;line-height:1.3}.sidebar-brand small{color:var(--text-soft);font-size:12px;line-height:1.45}
   .nav-label{color:#777382;font-size:11px;letter-spacing:.1em;margin-top:4px}
@@ -23,6 +26,7 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
 }
 
 @media(max-width:999px){
+  .exam-switcher{padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.exam-switcher>div{padding:0 2px 4px}.exam-choice{min-height:68px}.exam-choice b{font-size:16px}.exam-choice small{font-size:13px}
   main{padding:16px 16px 22px}.topbar h1{font-size:18px}.hero{padding:24px 22px}.hero h2{font-size:24px;line-height:1.35}.hero p{font-size:15px;line-height:1.55}
   .desktop-toolbar h2{font-size:22px;line-height:1.4}.search{min-height:48px;font-size:16px}
   .row{padding:17px}.row h3{font-size:16px;line-height:1.45}.row p,.meta,.muted{font-size:14px;line-height:1.55}
@@ -43,6 +47,7 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .tabs button.active{color:#fff;background:#39334e;border-color:#554d70;box-shadow:inset 3px 0 #a99fff}.tabs button.active span{color:#c4bcff}
   .topbar h1{color:#d4d0dc}.desktop-toolbar h2,.section-heading .section-title,.list-summary h2{color:#f5f3f8}.desktop-toolbar>div>p,.section-heading p,.desktop-only{color:#c5c1ce}.section-title{color:#d1ccd9}.row p,.meta,.muted{color:var(--text-soft)}
   .card,.row,.answer-box,.search,.question-panel,.progress-card{background:#1f1c26;color:#f4f2f8;border-color:#403b49;box-shadow:0 8px 24px #0003}.quick-card.primary-quick{background:linear-gradient(135deg,#29243b,#242031);border-color:#514970}.quick-card:not(.primary-quick){background:#1f1c26}.quick-card .eyebrow,.subject-kind,.badge{color:#c7c0ff}.quick-card h3,.subject-copy h3,.exam h3{color:#faf9fc}.quick-card p,.subject-copy p,.exam p{color:#c9c5d0}
+  .exam-switcher,.exam-choice{background:#1f1c26;border-color:#45404f}.exam-choice small{color:#c5c1ce}.exam-choice.active{background:#342e4a;border-color:#a399e5}.exam-choice.public.active{background:#173c37;border-color:#57b8a6}.exam-choice-icon{background:#39334e;color:#c7c0ff}.exam-choice.public .exam-choice-icon{background:#1d443e;color:#78d3c1}.exam-choice.active i{color:#c7c0ff}.exam-choice.public.active i{color:#78d3c1}.exam-context-badge{background:#2b2835;color:#c7c0ff}.track-chip,.question-context .track-chip{background:#39334e;color:#d1caff;border-color:#655d82}.track-chip.public,.question-context .track-chip.public{background:#19423b;color:#85ddca;border-color:#397d70}
   .search{background:#1f1c26;color:#f5f3f8}.search::placeholder{color:#aaa5b2;opacity:1}.search-wrap>span{color:#c4bfcd}
   .subject{background:#1f1c26}.subject:hover,.quick-card:hover,.exam:hover,.question-link:hover{background:#292531;border-color:#625a77}.subject-tail strong{color:#b9b0ff}.subject-tail span,.subject-tail i,.subject-index{color:#b9b4c3}
   .progress-card,.question-context span,.answer-column .result{background:#1d1b24;color:#f4f2f8;border-color:#3b3845}.progress-card p{color:#c5c1ce}.progress-heading span{color:#e5e1ea}

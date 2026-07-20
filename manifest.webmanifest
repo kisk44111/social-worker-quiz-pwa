@@ -1,7 +1,7 @@
 {
   "name": "台灣社工師歷屆題庫",
   "short_name": "社工師題庫",
-  "description": "2021–2026 台灣社會工作師五科歷屆試題、詳解與隨機練習",
+  "description": "台灣社工師與公職社工師歷屆試題、詳解、申論擬答與隨機練習",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
