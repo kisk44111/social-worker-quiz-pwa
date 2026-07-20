@@ -16,4 +16,6 @@
   .answer-box h3{color:#c3bcff}.good{color:#78d28b}.bad{color:#ff9299}
   .primary{background:#7167d8;color:white}.hero{background:linear-gradient(135deg,#38306f,#554b94)}
   .offline{background:#ebe8f3;color:#1a1720}
+  .question-panel,.progress-card{background:#1d1b24;border-color:#3b3845}.question-context span,.question-number,.quick-icon{background:#2b2835}.progress-track{background:#36323f}.subject-hero{background:linear-gradient(135deg,#38306f,#554b94)}
+  @media(min-width:1000px){body{background:linear-gradient(135deg,#121117,#17151e)}.topbar{background:rgba(17,16,22,.88)}.tabs{background:rgba(24,22,31,.96)}.quick-card.primary-quick{background:linear-gradient(135deg,#201e2a,#28243e)}.option:not(:disabled):hover{background:#292631;border-color:#7167a9}}
 }

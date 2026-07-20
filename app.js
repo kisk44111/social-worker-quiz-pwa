@@ -8,6 +8,13 @@ const state = {
   correct: Number(localStorage.getItem('correct') || 0), selected: null, submitted: false
 };
 const subjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
+const subjectInfo = {
+  '社會工作':['基礎','理解核心理論與專業價值'],
+  '人類行為與社會環境':['發展','掌握生命歷程與環境系統'],
+  '社會工作直接服務':['實務','熟悉個案、團體與家庭工作'],
+  '社會工作研究方法':['研究','建立研究設計與統計概念'],
+  '社會政策與社會立法':['政策','統整制度、法規與福利服務']
+};
 const title = $('#title'), app = $('#app'), back = $('#back'), tabs = $('#tabs');
 
 function save(){
@@ -27,11 +34,12 @@ function render(){
 }
 function renderLibrary(){
   title.textContent='社工師題庫';
-  app.innerHTML=`<div class="hero"><h2>台灣社工師歷屆題庫</h2><p>2021–2026・五大科目・共 ${state.questions.length.toLocaleString()} 題</p></div>
-  <input class="search" id="search" type="search" placeholder="搜尋題目">
-  <button class="row" id="random"><h3>🔀 40 題隨機練習</h3><p>從所有歷屆選擇題隨機抽題</p></button>
-  <button class="row" id="essays"><h3>✎ 申論題總覽</h3><p>歷屆申論題完整收錄</p></button>
-  <div class="section-title">五大科目</div>${subjects.map(s=>`<button class="row subject" data-subject="${esc(s)}"><span class="subject-count">${state.questions.filter(q=>q.subject===s).length} 題</span><h3>${esc(s)}</h3><p>2021–2026 歷屆試題</p></button>`).join('')}`;
+  const accuracy=state.answered?Math.round(state.correct/state.answered*100):0;
+  app.innerHTML=`<section class="hero"><div><span class="eyebrow">2026 社工師考試準備</span><h2>今天想從哪裡開始？</h2><p>整合 2021–2026 歷屆試題、完整詳解與申論擬答。</p></div><div class="hero-stats"><div><strong>${state.questions.length.toLocaleString()}</strong><span>收錄題數</span></div><div><strong>${state.answered}</strong><span>累計作答</span></div><div><strong>${accuracy}%</strong><span>目前正確率</span></div></div></section>
+  <div class="desktop-toolbar"><div><h2>題庫總覽</h2><p>依科目練習，或直接開始今日測驗</p></div><label class="search-wrap"><span>⌕</span><input class="search" id="search" type="search" placeholder="搜尋題目關鍵字"></label></div>
+  <section class="quick-grid"><button class="row quick-card primary-quick" id="random"><span class="quick-icon">↝</span><div><span class="eyebrow">快速開始</span><h3>40 題隨機練習</h3><p>從所有歷屆選擇題智慧抽題</p></div><b>開始 →</b></button>
+  <button class="row quick-card" id="essays"><span class="quick-icon">✎</span><div><span class="eyebrow">申論專區</span><h3>申論題總覽</h3><p>查看 AI 擬答架構與參考答案</p></div><b>瀏覽 →</b></button></section>
+  <div class="section-heading"><div><span class="section-title">五大科目</span><p>選擇科目查看歷屆試題與隨機練習</p></div><span class="desktop-only">2021 — 2026</span></div><section class="subject-grid">${subjects.map((s,i)=>`<button class="row subject" data-subject="${esc(s)}"><span class="subject-index">0${i+1}</span><div class="subject-copy"><span class="subject-kind">${subjectInfo[s][0]}</span><h3>${esc(s)}</h3><p>${subjectInfo[s][1]}</p></div><div class="subject-tail"><strong>${state.questions.filter(q=>q.subject===s).length}</strong><span>題</span><i>→</i></div></button>`).join('')}</section>`;
   $('#random').onclick=()=>openList('40 題隨機練習',shuffle(state.questions.filter(q=>q.type==='multipleChoice')).slice(0,40));
   $('#essays').onclick=()=>openList('申論題總覽',state.questions.filter(q=>q.type==='essay'));
   document.querySelectorAll('.subject').forEach(b=>b.onclick=()=>push('subject',{activeSubject:b.dataset.subject}));
@@ -40,22 +48,26 @@ function renderLibrary(){
 function renderSubject(){
   const s=state.activeSubject, qs=state.questions.filter(q=>q.subject===s); title.textContent=s;
   const groups={}; qs.forEach(q=>{const k=`${q.year}-${q.session}`;(groups[k]??=[]).push(q)});
-  app.innerHTML=`<button class="row" id="subjectRandom"><h3>🔀 40 題科目隨機練習</h3><p>從本科技歷屆選擇題隨機抽題</p></button><div class="section-title">歷年題庫</div>`+
+  app.innerHTML=`<section class="subject-hero"><span class="eyebrow">科目題庫</span><h2>${esc(s)}</h2><p>${subjectInfo[s]?.[1]||'歷屆試題完整收錄'}</p><div><strong>${qs.length}</strong> 題收錄・2021–2026</div></section><button class="row subject-random" id="subjectRandom"><span class="quick-icon">↝</span><div><span class="eyebrow">快速練習</span><h3>40 題科目隨機測驗</h3><p>從本科歷屆選擇題隨機抽題</p></div><b>開始 →</b></button><div class="section-heading"><div><span class="section-title">歷年題庫</span><p>依考試年度與梯次瀏覽</p></div></div><section class="exam-grid">`+
     Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v])=>`<button class="row exam" data-key="${k}"><h3>${v[0].year} 年・第 ${v[0].session} 次</h3><p>${v.length} 題</p></button>`).join('');
+  app.innerHTML+='</section>';
   $('#subjectRandom').onclick=()=>openList(`${s}隨機練習`,shuffle(qs.filter(q=>q.type==='multipleChoice')).slice(0,40));
   document.querySelectorAll('.exam').forEach(b=>b.onclick=()=>openList(`${groups[b.dataset.key][0].year} 第 ${groups[b.dataset.key][0].session} 次`,groups[b.dataset.key]));
 }
 function openList(name,items,navigate=true){state.currentList=items;state.listTitle=name;if(navigate)push('list');else{state.stack.push({view:'library'});state.view='list';render()}}
 function renderList(name,items){
   title.textContent=name;
-  app.innerHTML=items.length?items.map((q,i)=>`<button class="row question-link ${q.type==='essay'?'essay':''}" data-i="${i}"><span class="badge">${q.type==='essay'?'申論・含 AI 擬答與參考答案':'第 '+q.number+' 題'}</span><p>${esc(q.prompt)}</p><div class="meta">${q.year}・第 ${q.session} 次・${esc(q.subject)}</div></button>`).join(''):'<div class="empty">目前沒有題目</div>';
+  app.innerHTML=items.length?`<div class="list-summary"><div><span class="eyebrow">練習題單</span><h2>${esc(name)}</h2></div><strong>${items.length}<small> 題</small></strong></div><section class="question-grid">${items.map((q,i)=>`<button class="row question-link ${q.type==='essay'?'essay':''}" data-i="${i}"><div class="question-number">${q.type==='essay'?'✎':String(i+1).padStart(2,'0')}</div><div class="question-preview"><span class="badge">${q.type==='essay'?'申論・含 AI 擬答與參考答案':'第 '+q.number+' 題'}</span><p>${esc(q.prompt)}</p><div class="meta">${q.year}・第 ${q.session} 次・${esc(q.subject)}</div></div><span class="row-arrow">→</span></button>`).join('')}</section>`:'<div class="empty">目前沒有題目</div>';
   document.querySelectorAll('.question-link').forEach(b=>b.onclick=()=>{state.currentList=items;state.currentIndex=+b.dataset.i;state.selected=null;state.submitted=false;push('question')});
 }
 function renderQuestion(){
   const q=state.currentList[state.currentIndex], letters=['A','B','C','D']; title.textContent=q.type==='essay'?'申論題':`第 ${state.currentIndex+1}／${state.currentList.length} 題`;
   const opts=q.options.map((o,i)=>{const l=letters[i];let cls=state.selected===l?'selected ':'';if(state.submitted&&l===q.answer)cls+='correct';else if(state.submitted&&l===state.selected)cls+='incorrect';return `<button class="row option ${cls}" data-letter="${l}" ${state.submitted?'disabled':''}><span class="letter">${l}</span><span>${esc(o)}</span></button>`}).join('');
   const result=state.submitted?`<div class="result ${state.selected===q.answer?'good':'bad'}">${state.selected===q.answer?'✓ 答對了':'✕ 正確答案：'+esc(q.answer)}</div>${q.explanation?`<div class="answer-box"><h3>💡 完整詳解</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation)}</div><p class="muted">本詳解依考選部標準答案逐項整理，非考選部官方解析。</p></div>`:''}`:'';
-  app.innerHTML=`<div class="meta">${q.year} 第 ${q.session} 次・${esc(q.subject)}<button class="star" id="star" aria-label="收藏">${state.favorites.has(q.id)?'★':'☆'}</button></div><p class="question-text">${esc(q.prompt)}</p>${q.type==='essay'?`<div class="answer-box"><h3>AI 擬答方向</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation||'擬答整理中')}</div><p class="muted">本內容由 AI 依題幹生成，非考選部官方答案。</p></div><div class="answer-box reference-answer"><h3>AI 參考答案</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.referenceAnswer||'參考答案整理中')}</div><p class="muted">參考答案依上述擬答方向生成；法規、數據與專有名詞請以考試時點的官方資料及教科書核對。</p></div>`:opts+result+`<button id="submit" class="primary" ${!state.selected&&!state.submitted?'disabled':''}>${state.submitted?(state.currentIndex+1<state.currentList.length?'下一題':'完成練習'):'確認答案'}</button>`}`;
+  const progress=Math.round((state.currentIndex+1)/state.currentList.length*100);
+  const context=`<div class="question-context"><span>${q.year} 第 ${q.session} 次</span><span>${esc(q.subject)}</span><button class="star" id="star" aria-label="收藏">${state.favorites.has(q.id)?'★':'☆'}</button></div>`;
+  const progressCard=`<aside class="progress-card"><div class="progress-heading"><span>練習進度</span><strong>${state.currentIndex+1} / ${state.currentList.length}</strong></div><div class="progress-track"><i style="width:${progress}%"></i></div><p>${state.submitted?'已完成本題解析，可前往下一題。':'選擇答案後送出，即可查看完整詳解。'}</p></aside>`;
+  app.innerHTML=q.type==='essay'?`${context}<div class="essay-layout"><article class="question-panel"><span class="eyebrow">申論題</span><p class="question-text">${esc(q.prompt)}</p></article><div class="essay-answers"><div class="answer-box"><h3><span>01</span> AI 擬答方向</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation||'擬答整理中')}</div><p class="muted">本內容由 AI 依題幹生成，非考選部官方答案。</p></div><div class="answer-box reference-answer"><h3><span>02</span> AI 參考答案</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.referenceAnswer||'參考答案整理中')}</div><p class="muted">法規、數據與專有名詞請以考試時點的官方資料及教科書核對。</p></div></div></div>`:`${context}<div class="question-layout"><section class="question-panel"><div class="question-kicker"><span>單選題</span><strong>${state.currentIndex+1} / ${state.currentList.length}</strong></div><p class="question-text">${esc(q.prompt)}</p><div class="options">${opts}</div><button id="submit" class="primary" ${!state.selected&&!state.submitted?'disabled':''}>${state.submitted?(state.currentIndex+1<state.currentList.length?'下一題 →':'完成練習'):'確認答案'}</button></section><aside class="answer-column">${result||progressCard}</aside></div>`;
   $('#star').onclick=()=>{state.favorites.has(q.id)?state.favorites.delete(q.id):state.favorites.add(q.id);save();renderQuestion()};
   document.querySelectorAll('.option').forEach(b=>b.onclick=()=>{if(!state.submitted){state.selected=b.dataset.letter;renderQuestion()}});
   if($('#submit'))$('#submit').onclick=()=>{if(state.submitted){if(++state.currentIndex<state.currentList.length){state.selected=null;state.submitted=false;render()}else back.click()}else{state.submitted=true;state.answered++;if(state.selected===q.answer){state.correct++;state.wrong.delete(q.id)}else state.wrong.add(q.id);save();renderQuestion()}};
