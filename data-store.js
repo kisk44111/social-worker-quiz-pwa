@@ -8,8 +8,8 @@
   'use strict';
 
   const APP_ID = 'social-worker-quiz-pwa';
-  const SCHEMA_VERSION = 1;
-  const BACKUP_VERSION = 1;
+  const SCHEMA_VERSION = 2;
+  const BACKUP_VERSION = 2;
   const DB_NAME = 'social-worker-quiz-pwa';
   const DB_VERSION = 1;
   const STATE_KEY = 'learning-state';
@@ -121,7 +121,14 @@
     }
     if (!payload || typeof payload !== 'object') throw new Error('備份檔格式不正確。');
     if (payload.app !== APP_ID) throw new Error('這不是社工師題庫的備份檔。');
-    if (payload.backupVersion !== BACKUP_VERSION) throw new Error('此備份版本尚不支援。');
+    if (![1, BACKUP_VERSION].includes(payload.backupVersion)) throw new Error('此備份版本尚不支援。');
+    // v1 was the phase-0 backup shape. It has no per-attempt records, so it
+    // is deliberately upgraded as an empty-history summary rather than guessed history.
+    if (payload.backupVersion === 1) {
+      const legacy = payload.learningState;
+      if (!legacy || !Array.isArray(legacy.favorites) || !Array.isArray(legacy.wrong) || !Number.isInteger(legacy.answered) || !Number.isInteger(legacy.correct)) throw new Error('備份中的學習資料不完整或已損毀。');
+      return { ...payload, backupVersion: BACKUP_VERSION, learningState: normaliseLearningState(legacy) };
+    }
     if (!isValidLearningState(payload.learningState)) throw new Error('備份中的學習資料不完整或已損毀。');
     return payload;
   }

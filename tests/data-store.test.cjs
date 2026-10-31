@@ -56,6 +56,14 @@ test('backup import validates its identity and only merges without deleting prog
   await assert.rejects(() => store.importBackup('{"app":"other"}'), /不是社工師題庫/);
 });
 
+test('phase-0 v1 backups upgrade without inventing attempt history', async () => {
+  const backup = { app: 'social-worker-quiz-pwa', backupVersion: 1, exportedAt: '2026-10-31T00:00:00.000Z', learningState: { schemaVersion: 1, favorites: ['old-q'], wrong: [], answered: 8, correct: 6, examType: 'socialWorker', updatedAt: '2026-10-31T00:00:00.000Z' } };
+  const upgraded = storeApi.validateBackup(backup);
+  assert.equal(upgraded.backupVersion, 2);
+  assert.deepEqual(upgraded.learningState.attempts, []);
+  assert.equal(upgraded.learningState.answered, 8);
+});
+
 test('uses legacy localStorage safely when IndexedDB is unavailable', async () => {
   const storage = localStorageSeed({ favorites: '["q1"]' });
   const store = storeApi.createStore({ storage, adapterFactory: async () => { throw new Error('blocked'); } });
