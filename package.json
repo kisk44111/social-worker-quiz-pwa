@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "test:storage": "node --test tests/data-store.test.cjs tests/sw-cache-policy.test.cjs tests/study-engine.test.cjs",
+    "test:questions": "python3 -m unittest tests/test_questions_validation.py",
+    "test:official": "python3 tools/verify_115_second_social_worker.py",
+    "test": "npm run test:storage && npm run test:questions && python3 tools/validate_questions.py && npm run test:official"
+  }
+}
