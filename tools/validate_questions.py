@@ -62,6 +62,15 @@ def validate_questions(questions: Any) -> list[str]:
             issue(errors, index, "explanation 必須是非空字串。")
         if not isinstance(question["questionPDF"], (str, type(None))) or not isinstance(question["answerPDF"], (str, type(None))):
             issue(errors, index, "questionPDF 與 answerPDF 必須是字串或 null。")
+        if "acceptedAnswers" in question:
+            accepted = question["acceptedAnswers"]
+            if not isinstance(accepted, list) or not accepted or not all(item in {"A", "B", "C", "D"} for item in accepted):
+                issue(errors, index, "acceptedAnswers 必須是非空 A–D 陣列。")
+        if "source" in question:
+            source = question["source"]
+            needed_source = {"sourceUrl", "answerSourceUrl", "answerVersion", "verifiedAt", "questionSha256", "answerSha256"}
+            if not isinstance(source, dict) or needed_source - source.keys() or not all(isinstance(source.get(key), str) and source[key] for key in needed_source):
+                issue(errors, index, "source 缺少官方來源、版本或核對資訊。")
 
         question_type = question["type"]
         if question_type not in {"multipleChoice", "essay"}:
