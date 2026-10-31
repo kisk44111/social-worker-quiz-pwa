@@ -23,7 +23,7 @@
     schemaVersion: SCHEMA_VERSION,
     favorites: [], wrong: [], answered: 0, correct: 0,
     examType: 'socialWorker', attempts: [], reviews: [], mockExams: [], essayPractices: [],
-    resume: null, plan: { weeklyGoal: 120, startDate: null }, updatedAt: new Date().toISOString()
+    resume: null, plan: { weeklyGoal: 120, startDate: null }, notes: {}, tags: {}, customTags: [], errataNotes: {}, updatedAt: new Date().toISOString()
   });
 
   const uniqueStrings = value => Array.isArray(value)
@@ -50,6 +50,10 @@
       essayPractices: Array.isArray(source.essayPractices) ? source.essayPractices.filter(item => item && typeof item.id === 'string' && typeof item.questionId === 'string').slice(-500) : [],
       resume: source.resume && typeof source.resume === 'object' && Array.isArray(source.resume.questionIds) ? source.resume : null,
       plan: source.plan && typeof source.plan === 'object' ? { weeklyGoal: nonNegativeInteger(source.plan.weeklyGoal) || 120, startDate: typeof source.plan.startDate === 'string' ? source.plan.startDate : null } : base.plan,
+      notes: source.notes && typeof source.notes === 'object' && !Array.isArray(source.notes) ? source.notes : {},
+      tags: source.tags && typeof source.tags === 'object' && !Array.isArray(source.tags) ? source.tags : {},
+      customTags: uniqueStrings(source.customTags),
+      errataNotes: source.errataNotes && typeof source.errataNotes === 'object' && !Array.isArray(source.errataNotes) ? source.errataNotes : {},
       updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : base.updatedAt
     };
   }

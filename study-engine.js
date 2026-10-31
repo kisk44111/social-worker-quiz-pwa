@@ -45,5 +45,27 @@
     });
     return { ...mock, completedAt: new Date().toISOString(), choiceScore: correct, choiceTotal: mock.questionIds.length, choiceAccuracy: Math.round(correct / mock.questionIds.length * 100), results };
   }
-  return { INTERVALS, day, isCorrect, scheduleReview, dueReviews, subjectStats, lastSevenDays, gradeMock };
+  function weightedRecommendation(questions, learning, examType = 'socialWorker', count = 40, now = new Date()) {
+    const due = new Set(dueReviews(learning.reviews || [], now, examType).map(item => item.questionId));
+    const attempted = new Set((learning.attempts || []).filter(item => item.examType === examType).map(item => item.questionId));
+    const wrong = new Set(learning.wrong || []), weak = new Set(subjectStats(learning.attempts || [], examType).slice(0, 2).map(item => item.subject));
+    const pool = questions.filter(question => (question.examType || 'socialWorker') === examType && question.type === 'multipleChoice');
+    const scored = pool.map(question => ({ question, score: 1 + (due.has(question.id) ? 12 : 0) + (wrong.has(question.id) ? 7 : 0) + (!attempted.has(question.id) ? 5 : 0) + (weak.has(question.subject) ? 3 : 0) + Math.random() * 2 }));
+    return scored.sort((a, b) => b.score - a.score).slice(0, count).map(item => item.question);
+  }
+  function weeklyTrend(attempts, now = new Date(), weeks = 8) {
+    const end = new Date(now); end.setUTCHours(0, 0, 0, 0); end.setUTCDate(end.getUTCDate() - end.getUTCDay());
+    return Array.from({ length: weeks }, (_, index) => {
+      const start = new Date(end); start.setUTCDate(start.getUTCDate() - (weeks - 1 - index) * 7);
+      const finish = new Date(start); finish.setUTCDate(finish.getUTCDate() + 7);
+      const items = attempts.filter(item => new Date(item.at) >= start && new Date(item.at) < finish);
+      return { week: day(start), answered: items.length, correct: items.filter(item => item.correct).length, accuracy: items.length ? Math.round(items.filter(item => item.correct).length / items.length * 100) : null };
+    });
+  }
+  function dailyTasks(learning, now = new Date()) {
+    const stats = subjectStats(learning.attempts || []), weakest = stats.slice(0, 2).map(item => item.subject);
+    const due = dueReviews(learning.reviews || [], now).length;
+    return [{ kind: 'review', label: `複習到期錯題 ${due} 題`, count: Math.min(Math.max(due, 10), 30) }, { kind: 'weak', label: `${weakest[0] || '社會工作'} 弱科練習`, count: 20 }, { kind: 'essay', label: '申論結構練習', count: 1 }];
+  }
+  return { INTERVALS, day, isCorrect, scheduleReview, dueReviews, subjectStats, lastSevenDays, gradeMock, weightedRecommendation, weeklyTrend, dailyTasks };
 });
