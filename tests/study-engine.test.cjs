@@ -31,3 +31,14 @@ test('mock grade honours officially accepted corrected answers', () => {
   const result = study.gradeMock(mock, [{ ...question, acceptedAnswers: ['B', 'D'] }]);
   assert.equal(result.choiceScore, 1); assert.equal(result.choiceAccuracy, 100);
 });
+
+test('weighted recommendation prioritises due review before ordinary unseen questions', () => {
+  const questions = [{ ...question, type: 'multipleChoice' }, { id: 'q2', subject: '社會工作研究方法', examType: 'socialWorker', type: 'multipleChoice', answer: 'B' }];
+  const picks = study.weightedRecommendation(questions, { reviews: [{ questionId: 'q1', examType: 'socialWorker', dueAt: '2026-10-30' }], attempts: [], wrong: [] }, 'socialWorker', 1, new Date('2026-10-31T08:00:00Z'));
+  assert.equal(picks[0].id, 'q1');
+});
+
+test('weekly trend groups only recorded attempts', () => {
+  const points = study.weeklyTrend([{ at: '2026-10-30T08:00:00Z', correct: true }], new Date('2026-10-31T12:00:00Z'), 1);
+  assert.equal(points[0].answered, 1); assert.equal(points[0].accuracy, 100);
+});

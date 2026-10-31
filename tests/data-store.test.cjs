@@ -64,6 +64,14 @@ test('phase-0 v1 backups upgrade without inventing attempt history', async () =>
   assert.equal(upgraded.learningState.answered, 8);
 });
 
+test('backup keeps custom study data', async () => {
+  const store = storeApi.createStore({ storage: localStorageSeed(), adapterFactory: async () => storeApi.createMemoryAdapter() });
+  await store.initialize();
+  await store.save({ notes: { q1: 'note' }, tags: { q1: ['tag'] }, customTags: ['tag'], favorites: [], wrong: [], answered: 0, correct: 0, examType: 'socialWorker', attempts: [], reviews: [], mockExams: [], essayPractices: [], resume: null, plan: { weeklyGoal: 120, startDate: null } });
+  const backup = await store.exportBackup();
+  assert.equal(backup.learningState.notes.q1, 'note');
+});
+
 test('uses legacy localStorage safely when IndexedDB is unavailable', async () => {
   const storage = localStorageSeed({ favorites: '["q1"]' });
   const store = storeApi.createStore({ storage, adapterFactory: async () => { throw new Error('blocked'); } });
