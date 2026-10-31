@@ -2,11 +2,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const state = {
   questions: [], view: 'library', stack: [], currentList: [], currentIndex: 0,
-  favorites: new Set(JSON.parse(localStorage.getItem('favorites') || '[]')),
-  wrong: new Set(JSON.parse(localStorage.getItem('wrong') || '[]')),
-  answered: Number(localStorage.getItem('answered') || 0),
-  correct: Number(localStorage.getItem('correct') || 0), selected: null, submitted: false,
-  examType: localStorage.getItem('examType') || 'socialWorker'
+  favorites: new Set(), wrong: new Set(), answered: 0, correct: 0,
+  selected: null, submitted: false, examType: 'socialWorker'
 };
 const socialSubjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
 const publicSubjects = ['社會福利政策與法規','社會工作實務'];
@@ -28,11 +25,9 @@ const examOf=q=>q.examType||'socialWorker';
 const examQuestions=()=>state.questions.filter(q=>examOf(q)===state.examType);
 const activeConfig=()=>examConfigs[state.examType];
 
-function save(){
-  localStorage.setItem('favorites', JSON.stringify([...state.favorites]));
-  localStorage.setItem('wrong', JSON.stringify([...state.wrong]));
-  localStorage.setItem('answered', state.answered); localStorage.setItem('correct', state.correct);
-}
+function learningSnapshot(){return {favorites:[...state.favorites],wrong:[...state.wrong],answered:state.answered,correct:state.correct,examType:state.examType}}
+function applyLearningState(saved){state.favorites=new Set(saved.favorites);state.wrong=new Set(saved.wrong);state.answered=saved.answered;state.correct=saved.correct;state.examType=saved.examType}
+function save(){window.learningDataStore.save(learningSnapshot()).catch(()=>{});}
 function shuffle(items){const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function push(view, data={}){state.stack.push({view:state.view});Object.assign(state,data);state.view=view;render()}
 function root(view){state.view=view;state.stack=[];state.selected=null;state.submitted=false;render()}
@@ -40,7 +35,7 @@ function render(){
   app.dataset.view=state.view;
   back.classList.toggle('hidden', !state.stack.length); tabs.classList.toggle('hidden', state.view==='question');
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===state.view));
-  ({library:renderLibrary,wrong:()=>renderList('錯題複習',examQuestions().filter(q=>state.wrong.has(q.id))),favorites:()=>renderList('收藏題目',examQuestions().filter(q=>state.favorites.has(q.id))),stats:renderStats,subject:renderSubject,list:()=>renderList(state.listTitle,state.currentList),question:renderQuestion}[state.view]||renderLibrary)();
+  ({library:renderLibrary,wrong:()=>renderList('錯題複習',examQuestions().filter(q=>state.wrong.has(q.id))),favorites:()=>renderList('收藏題目',examQuestions().filter(q=>state.favorites.has(q.id))),stats:renderStats,subject:renderSubject,list:()=>renderList(state.listTitle,state.currentList),question:renderQuestion,data:renderDataManagement}[state.view]||renderLibrary)();
   scrollTo(0,0);
 }
 function renderLibrary(){
@@ -51,11 +46,13 @@ function renderLibrary(){
   <section class="hero ${config.accent}"><div><span class="eyebrow">${config.period} ${config.label}</span><h2>${isPublic?'準備公職社工師，從歷屆申論開始':'今天想從哪裡開始？'}</h2><p>${isPublic?'收錄考選部近五年正式試題，附 AI 擬答方向與參考答案。':'整合 2021–2026 歷屆試題、完整詳解與申論擬答。'}</p></div><div class="hero-stats"><div><strong>${questions.length.toLocaleString()}</strong><span>收錄題數</span></div><div><strong>${subjects.length}</strong><span>專業科目</span></div><div><strong>${config.period}</strong><span>收錄年度</span></div></div></section>
   <div class="desktop-toolbar"><div><h2>題庫總覽</h2><p>依科目練習，或直接開始今日測驗</p></div><label class="search-wrap"><span>⌕</span><input class="search" id="search" type="search" placeholder="搜尋題目關鍵字"></label></div>
   <section class="quick-grid"><button class="row quick-card primary-quick" id="random"><span class="quick-icon">↝</span><div><span class="eyebrow">快速開始</span><h3>${isPublic?'10 題隨機申論複習':'40 題隨機練習'}</h3><p>${isPublic?'從兩科近五年試題隨機抽題':'從所有歷屆選擇題智慧抽題'}</p></div><b>開始 →</b></button>
-  <button class="row quick-card" id="essays"><span class="quick-icon">✎</span><div><span class="eyebrow">申論專區</span><h3>申論題總覽</h3><p>查看 AI 擬答架構與參考答案</p></div><b>瀏覽 →</b></button></section>
+  <button class="row quick-card" id="essays"><span class="quick-icon">✎</span><div><span class="eyebrow">申論專區</span><h3>申論題總覽</h3><p>查看 AI 擬答架構與參考答案</p></div><b>瀏覽 →</b></button>
+  <button class="row quick-card" id="dataManagement"><span class="quick-icon">⇅</span><div><span class="eyebrow">資料保護</span><h3>備份與還原</h3><p>匯出或合併匯入本機學習紀錄</p></div><b>管理 →</b></button></section>
   <div class="section-heading"><div><span class="section-title">${isPublic?'兩大專業科目':'五大科目'}</span><p>選擇科目查看歷屆試題與隨機練習</p></div><span class="desktop-only">${config.period.replace('–',' — ')}</span></div><section class="subject-grid ${isPublic?'public-subject-grid':''}">${subjects.map((s,i)=>`<button class="row subject ${isPublic?'public-subject':''}" data-subject="${esc(s)}"><span class="subject-index">0${i+1}</span><div class="subject-copy"><span class="subject-kind">${subjectInfo[s][0]}</span><h3>${esc(s)}</h3><p>${subjectInfo[s][1]}</p></div><div class="subject-tail"><strong>${questions.filter(q=>q.subject===s).length}</strong><span>題</span><i>→</i></div></button>`).join('')}</section>`;
-  document.querySelectorAll('.exam-choice').forEach(b=>b.onclick=()=>{state.examType=b.dataset.exam;localStorage.setItem('examType',state.examType);state.stack=[];render()});
+  document.querySelectorAll('.exam-choice').forEach(b=>b.onclick=()=>{state.examType=b.dataset.exam;save();state.stack=[];render()});
   $('#random').onclick=()=>openList(isPublic?'10 題隨機申論複習':'40 題隨機練習',shuffle(questions.filter(q=>isPublic?q.type==='essay':q.type==='multipleChoice')).slice(0,isPublic?10:40));
   $('#essays').onclick=()=>openList('申論題總覽',questions.filter(q=>q.type==='essay'));
+  $('#dataManagement').onclick=()=>push('data');
   document.querySelectorAll('.subject').forEach(b=>b.onclick=()=>push('subject',{activeSubject:b.dataset.subject}));
   $('#search').oninput=e=>{const q=e.target.value.trim();if(q.length>1) openList('搜尋結果',questions.filter(x=>x.prompt.includes(q)),false)};
 }
@@ -88,6 +85,23 @@ function renderQuestion(){
   document.querySelectorAll('.option').forEach(b=>b.onclick=()=>{if(!state.submitted){state.selected=b.dataset.letter;renderQuestion()}});
   if($('#submit'))$('#submit').onclick=()=>{if(state.submitted){if(++state.currentIndex<state.currentList.length){state.selected=null;state.submitted=false;render()}else back.click()}else{state.submitted=true;state.answered++;if(state.selected===q.answer){state.correct++;state.wrong.delete(q.id)}else state.wrong.add(q.id);save();renderQuestion()}};
 }
+function renderDataManagement(){
+  title.textContent='備份與還原';
+  const info=window.learningDataStore.getDiagnostics(), warnings=info.warnings.length?`<div class="card"><h3>資料狀態提醒</h3><p>${esc(info.warnings.join(' '))}</p></div>`:'';
+  app.innerHTML=`<section class="subject-hero"><span class="eyebrow">資料保護</span><h2>備份與還原</h2><p>學習紀錄儲存在此裝置。匯入只會合併收藏與錯題，且不會降低既有累計作答紀錄。</p><div><strong>${info.backend}</strong>・資料格式 v${window.learningDataStore ? 1 : 0}</div></section><section class="quick-grid"><button class="row quick-card primary-quick" id="exportData"><span class="quick-icon">↓</span><div><span class="eyebrow">備份</span><h3>匯出學習紀錄</h3><p>下載 JSON 檔，供更換裝置或更新前保存。</p></div><b>匯出 →</b></button><label class="row quick-card" for="importData"><span class="quick-icon">↑</span><div><span class="eyebrow">還原</span><h3>合併匯入備份</h3><p>不會刪除本機既有收藏、錯題或累計紀錄。</p></div><b>選擇檔案 →</b><input id="importData" type="file" accept="application/json,.json" hidden></label></section><div id="dataNotice" class="card muted">${info.migrated?'已完成舊版本機資料遷移，原始資料仍保留。':'可隨時匯出一份備份檔。'}</div>${warnings}`;
+  $('#exportData').onclick=async()=>{
+    const backup=await window.learningDataStore.exportBackup();
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);link.download=`social-worker-quiz-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);
+    $('#dataNotice').textContent='備份檔已下載。請將檔案存放在安全位置。';
+  };
+  $('#importData').onchange=async event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    try{applyLearningState(await window.learningDataStore.importBackup(await file.text()));$('#dataNotice').textContent='已完成安全合併匯入；既有紀錄沒有被刪除。';}
+    catch(error){$('#dataNotice').textContent=`無法匯入：${error.message}`;}
+    event.target.value='';
+  };
+}
 function renderStats(){
   title.textContent='學習統計';const accuracy=state.answered?Math.round(state.correct/state.answered*100):0,config=activeConfig(),questions=examQuestions(),isPublic=state.examType==='publicSocialWorker';
   app.innerHTML=`<div class="exam-context-badge">目前顯示：${config.label}</div><div class="stat-grid"><div class="card stat"><strong>${state.answered}</strong>累計作答</div><div class="card stat"><strong>${state.correct}</strong>答對題數</div><div class="card stat"><strong>${accuracy}%</strong>正確率</div><div class="card stat"><strong>${state.wrong.size}</strong>待複習錯題</div></div><div class="section-title">資料說明</div><div class="card">${isPublic?`收錄 ${config.period} 年公職社工師兩科考選部正式試題，共 ${questions.length} 題申論題，並提供 AI 擬答方向與參考答案。`:`收錄 2021–2026 年社工師五科考選部試題，共 ${questions.length.toLocaleString()} 題。選擇題答案採官方標準答案；申論題提供 AI 擬答方向與參考答案。`}<p class="muted">作答、錯題及收藏資料只保存在這台裝置上。</p></div>`;
@@ -115,4 +129,9 @@ async function loadQuestions(attempt=1){
     $('#retryLoad').onclick=()=>{app.innerHTML='<div class="loading">正在重新下載題庫⋯</div>';loadQuestions()};
   }
 }
-loadQuestions();
+async function bootstrap(){
+  try{const loaded=await window.learningDataStore.initialize();applyLearningState(loaded.state);}
+  catch(_){/* Keep the empty safe state; question loading must remain available. */}
+  loadQuestions();
+}
+bootstrap();
