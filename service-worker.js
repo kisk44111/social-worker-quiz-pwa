@@ -4,8 +4,8 @@ const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v15`;
 const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v15`;
 const ASSETS = [
   './', './index.html', './styles.css?build=9', './theme.css?build=9',
-  './desktop.css?build=9', './readability.css?build=13', './data-store.js?build=15',
-  './app.js?build=15', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './desktop.css?build=9', './readability.css?build=13', './data-store.js?build=15', './study-engine.js?build=16',
+  './app.js?build=16', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 
 function cacheResponse(cacheName, request, response) {
@@ -14,8 +14,12 @@ function cacheResponse(cacheName, request, response) {
   return caches.open(cacheName).then(cache => cache.put(request, copy)).then(() => response);
 }
 
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('install', event => event.waitUntil(
-  caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+  caches.open(CACHE).then(cache => cache.addAll(ASSETS))
 ));
 
 self.addEventListener('activate', event => event.waitUntil(
