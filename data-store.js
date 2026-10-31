@@ -22,7 +22,8 @@
   const defaultState = () => ({
     schemaVersion: SCHEMA_VERSION,
     favorites: [], wrong: [], answered: 0, correct: 0,
-    examType: 'socialWorker', updatedAt: new Date().toISOString()
+    examType: 'socialWorker', attempts: [], reviews: [], mockExams: [], essayPractices: [],
+    resume: null, plan: { weeklyGoal: 120, startDate: null }, updatedAt: new Date().toISOString()
   });
 
   const uniqueStrings = value => Array.isArray(value)
@@ -43,6 +44,12 @@
       answered,
       correct,
       examType: EXAM_TYPES.has(source.examType) ? source.examType : base.examType,
+      attempts: Array.isArray(source.attempts) ? source.attempts.filter(item => item && typeof item.questionId === 'string' && typeof item.at === 'string' && typeof item.correct === 'boolean').slice(-5000) : [],
+      reviews: Array.isArray(source.reviews) ? source.reviews.filter(item => item && typeof item.questionId === 'string' && typeof item.dueAt === 'string') : [],
+      mockExams: Array.isArray(source.mockExams) ? source.mockExams.filter(item => item && typeof item.id === 'string' && Array.isArray(item.questionIds)).slice(-100) : [],
+      essayPractices: Array.isArray(source.essayPractices) ? source.essayPractices.filter(item => item && typeof item.id === 'string' && typeof item.questionId === 'string').slice(-500) : [],
+      resume: source.resume && typeof source.resume === 'object' && Array.isArray(source.resume.questionIds) ? source.resume : null,
+      plan: source.plan && typeof source.plan === 'object' ? { weeklyGoal: nonNegativeInteger(source.plan.weeklyGoal) || 120, startDate: typeof source.plan.startDate === 'string' ? source.plan.startDate : null } : base.plan,
       updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : base.updatedAt
     };
   }
@@ -53,7 +60,9 @@
     if (!value.favorites.every(item => typeof item === 'string') || !value.wrong.every(item => typeof item === 'string')) return false;
     return Number.isInteger(value.answered) && value.answered >= 0
       && Number.isInteger(value.correct) && value.correct >= 0 && value.correct <= value.answered
-      && EXAM_TYPES.has(value.examType) && typeof value.updatedAt === 'string';
+      && EXAM_TYPES.has(value.examType) && typeof value.updatedAt === 'string'
+      && Array.isArray(value.attempts) && Array.isArray(value.reviews) && Array.isArray(value.mockExams)
+      && Array.isArray(value.essayPractices);
   }
 
   function readLegacy(storage) {
