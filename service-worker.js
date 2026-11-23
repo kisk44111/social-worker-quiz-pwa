@@ -1,11 +1,11 @@
 importScripts('./sw-cache-policy.js');
 
-const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v18`;
-const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v18`;
+const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v19`;
+const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v19`;
 const ASSETS = [
   './', './index.html', './styles.css?build=9', './theme.css?build=9',
   './desktop.css?build=9', './readability.css?build=13', './knowledge-base.css?build=1', './exam-cram-guides.css?build=1', './historical-theory-dossiers.css?build=1', './data-store.js?build=15', './study-engine.js?build=16',
-  './knowledge-base.js?build=1', './exam-cram-guides.js?build=1', './historical-theory-dossiers.js?build=1', './app.js?build=19', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './knowledge-base.js?build=1', './exam-cram-guides.js?build=1', './historical-theory-dossiers.js?build=1', './historical-related-concepts.js?build=1', './app.js?build=20', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 
 function cacheResponse(cacheName, request, response) {
