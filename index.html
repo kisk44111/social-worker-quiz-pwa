@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="theme.css?build=9">
   <link rel="stylesheet" href="desktop.css?build=9">
   <link rel="stylesheet" href="readability.css?build=13">
+  <link rel="stylesheet" href="knowledge-base.css?build=1">
   <title>社工師題庫</title>
 </head>
 <body>
@@ -23,13 +24,14 @@
     <button id="install" class="install hidden">安裝</button>
     <button id="update" class="install hidden">更新</button>
   </header>
-  <main id="app"><div class="loading">正在載入 2,350 題題庫⋯</div></main>
+  <main id="app"><div class="loading">正在載入 2,560 題題庫⋯</div></main>
   <nav id="tabs" class="tabs" aria-label="主要功能">
     <div class="sidebar-brand"><div class="brand-mark">社</div><div><strong>社工師題庫</strong><small>備考學習中心</small></div></div>
     <div class="nav-label">學習選單</div>
     <button data-tab="library" class="active"><span>▤</span><em>題庫</em></button>
     <button data-tab="wrong"><span>↻</span><em>錯題</em></button>
     <button data-tab="favorites"><span>★</span><em>收藏</em></button>
+    <button data-tab="knowledge"><span>⌘</span><em>知識庫</em></button>
     <button data-tab="stats"><span>▥</span><em>統計</em></button>
     <div class="sidebar-foot"><span class="status-dot"></span> 題庫可離線使用</div>
   </nav>
@@ -37,6 +39,7 @@
   <div id="safariInstall" class="offline hidden">iPhone Safari：分享 → 加入主畫面，即可安裝題庫。</div>
   <script src="data-store.js?build=15" defer></script>
   <script src="study-engine.js?build=16" defer></script>
-  <script src="app.js?build=16" defer></script>
+  <script src="knowledge-base.js?build=1" defer></script>
+  <script src="app.js?build=17" defer></script>
 </body>
 </html>
