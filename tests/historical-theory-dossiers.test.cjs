@@ -9,6 +9,7 @@ function loadTheoryData() {
   vm.runInNewContext(fs.readFileSync('historical-related-concepts.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-theory-content.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-theory-primers.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('theory-completion.js', 'utf8'), context);
   return context.window;
 }
 
@@ -19,6 +20,19 @@ test('歷屆學者理論檔案具備完整精讀結構', () => {
     assert.ok(dossier.id && dossier.scholar && dossier.theory && dossier.history && dossier.status);
     assert.ok(dossier.framework.length >= 1 && dossier.points.length >= 1 && dossier.traps.length >= 1);
     assert.ok(dossier.terms.length >= 2);
+  }
+});
+
+test('架構型理論有完整對照，且題庫缺漏理論均有可追溯的歷屆題連結', () => {
+  const data = loadTheoryData();
+  for (const [id, completion] of Object.entries(data.theoryArchitectureCompletions)) {
+    assert.ok(completion.title && completion.items.length >= 2, `${id} 缺少完整架構對照`);
+  }
+  const questions = JSON.parse(fs.readFileSync('questions.json', 'utf8'));
+  for (const dossier of data.additionalTheoryDossiers) {
+    const count = questions.filter(question => dossier.directTerms.some(term => (question.prompt + ' ' + question.options.join(' ')).includes(term))).length;
+    assert.ok(count > 0, `${dossier.theory} 未連回任何歷屆題`);
+    assert.ok(dossier.content.length >= 20 && dossier.framework.length >= 3, `${dossier.theory} 內容不足`);
   }
 });
 
