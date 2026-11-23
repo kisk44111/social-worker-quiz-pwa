@@ -11,11 +11,14 @@
 
 ### Git 快照
 
-- 遠端正式分支：`origin/main`，最新正式合併提交為 `801f652eaf230b5c433d49ee50ffe27e707748df`（PR #12 merge）。
+- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，本輪歸檔前最新題庫完工提交為 `c8fc487`（全題庫 160 / 160 題申論結構化擬答與解析 100% 達陣）。
 - GitHub Pages 使用 **legacy Pages**，來源是 `main` 分支根目錄 `/`，不是 Actions artifact，也不是 `gh-pages` 分支。
-- 本地工作樹目前所在分支：`feature/historical-theory-dossiers`，提交為 `8735bea39958765692df7b5874620c577cf58020`。這是 PR 合併前的 head；其內容已經被 merge commit 納入遠端 `main`。
-- 本地 `main` 工作分支仍停在較舊的 `d40489b`，且落後 `origin/main` 14 個提交。**接手者不要誤把本地舊 main 推上去。** 首次工作請先 `git fetch origin`、切換 `main` 並 `git pull --ff-only`。
-- 本次產生本手冊前工作樹乾淨；新增 `HANDOFF.md` 後會成為未提交變更，應由接手者審閱後另行提交。
+- 近期核心里程碑（皆已合併並部署至 `origin/main`）：
+  - `fa42f18`：`data-store.js` 補齊進階欄位驗證與確定性無損備份合併，新增 4 組測試並升級 PWA 至 `v27`。
+  - `e883088`：`tools/generate_content_mc_explanations.py` 安全重構（零 Keychain 預設讀取、雙重確認旗標、寫前驗證與原子寫入）。
+  - `b325e24`：升級 PWA 至 **`v28`**，推出申論題雙區塊 UI（【AI 參考擬答（起・承・轉・合）】＋【答題解析與得分要點】）、`essayGuide` 結構驗證測試，以及零外部 API 依賴的離線批次工具 `tools/generate_essay_answers.py`。
+  - `7c9c349`、`1072885`、`13fa297`、`5b851e6`、`40e6138`、`e1c98fa`、`c8fc487`：分科完成**專技社工師五科（120 題）＋公職社工師兩科（40 題）共 160 / 160 題（100.0%）**結構化申論擬答與解析匯入，且全程通過 `npm test` 驗證。
+- 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則
 
@@ -119,6 +122,7 @@
     │   └── validate_questions.cpython-311.pyc
     ├── add_115_second_essay_guides.py
     ├── generate_content_mc_explanations.py
+    ├── generate_essay_answers.py
     ├── import_115_second_social_worker.py
     ├── import_public_social_worker.py
     ├── rebuild_mc_explanations.py
@@ -132,7 +136,7 @@
 |---|---|
 | `index.html` | 唯一 HTML entry point。建立 top bar、`#app`、底部／桌面側欄 `#tabs`、離線與 iOS 安裝提示；以 `defer` 順序載入所有全域資料模組後才載入 `app.js`。內含 `?build=` cache-busting 版號。頂端註解 `deployment build 15 (not deployed from this branch)` 已過時，屬文件技術債。 |
 | `app.js` | 約 53 KB 的單檔 SPA controller。定義 `state`、考試別／科目設定、畫面路由堆疊與所有 renderer。主要函式：`renderLibrary`、`renderSubject`、`renderList`、`renderQuestion`、`renderKnowledge`、`renderDataManagement`、`renderMockSetup`、`renderMock`、`renderMockResult`、`renderStats`、`loadQuestions`、`bootstrap`。依賴 `learningDataStore`、`studyEngine`、`examKnowledgeBase`、`examCramGuides` 與理論檔案 globals。所有使用者可見字串插值原則上經 `esc()` HTML escape。 |
-| `questions.json` | 6.45 MB 靜態題庫，唯一正式題目資料來源。`app.js` 以 `fetch('./questions.json', {cache:'no-cache'})` 載入；Service Worker 為它另建 data cache。 |
+| `questions.json` | 約 7.9 MB 靜態題庫，唯一正式題目資料來源（含全 160 題結構化 `essayGuide`）。`app.js` 以 `fetch('./questions.json', {cache:'no-cache'})` 載入；Service Worker 為它另建 data cache。 |
 | `data-store.js` | UMD/IIFE 模組；瀏覽器掛到 `window.learningDataStore`，Node 測試可 `require`。定義 IndexedDB adapter、localStorage legacy migration、資料正規化、備份格式驗證與合併。 |
 | `study-engine.js` | UMD/IIFE 模組；掛到 `window.studyEngine`。提供間隔複習、正確率、近 7 日／週趨勢、模擬考計分、加權推薦與每日任務純函式。 |
 | `sw-cache-policy.js` | Service Worker 與 Node 測試共用的 UMD cache namespace policy；確保只刪 `social-worker-quiz-pwa-` 前綴快取。 |
@@ -177,19 +181,20 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 | 檔案 | 說明 |
 |---|---|
-| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、備份合併、v1 備份升級、IndexedDB unavailable fallback。 |
+| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 29 項）。 |
 | `tests/study-engine.test.cjs` | 1/3/7/14 天複習、統計、已更正答案計分、加權推薦、週趨勢。 |
 | `tests/sw-cache-policy.test.cjs` | 快取隔離，避免刪到同 GitHub Pages 網域其他專案。 |
 | `tests/knowledge-base.test.cjs` | 卡片結構、來源索引與五科覆蓋。 |
 | `tests/exam-cram-guides.test.cjs` | 五科補帖完整性與每單元至少一題關聯歷屆題。 |
 | `tests/historical-theory-dossiers.test.cjs` | 理論／導讀／架構／概念延伸與實題連結完整性。 |
-| `tests/test_questions_validation.py` | 對 `tools.validate_questions` 的 Python unittest。 |
-| `tools/validate_questions.py` | release 前題庫 schema、ID、科別、題型、選項、答案、題號連續性驗證器。 |
+| `tests/test_questions_validation.py` | 對 `tools.validate_questions`、`essayGuide` 結構驗證與 `tools.generate_essay_answers` 離線批次匯入流程的 7 項 Python unittest。 |
+| `tools/validate_questions.py` | release 前題庫 schema、ID、科別、題型、選項、答案、題號連續性與 `essayGuide` 結構驗證器。 |
 | `tools/import_115_second_social_worker.py` | 115 年第二次五科官方 PDF importer；fail-closed，預期每科 2 申論 + 40 選擇與 40 官方答案。 |
 | `tools/verify_115_second_social_worker.py` | 重新下載官方答案／更正 PDF，比對題庫答案與 SHA-256。需要網路與 `pdftotext`。 |
 | `tools/import_public_social_worker.py` | 匯入 2022–2026 公職社工師兩科申論題與非官方作答提示。 |
-| `tools/add_115_second_essay_guides.py` | 為 115-2 十題申論補「非官方」起承轉合作答架構。 |
-| `tools/generate_content_mc_explanations.py` | 以 OpenRouter API 批次產生選擇題內容導向解析；會寫 `questions.json` 與 checkpoint，屬高風險資料維護操作。 |
+| `tools/add_115_second_essay_guides.py` | 早期為 115-2 十題申論補「非官方」起承轉合作答架構之腳本（現已由全庫 `essayGuide` 取代升級）。 |
+| `tools/generate_essay_answers.py` | 零付費 API、零本機模型依賴之申論題離線批次工具：支援 `--status`（盤點各科進度）、`--export-batch`（匯出標準化題組任務包供 Gemini／Antigravity 撰寫）與 `--import-json`（含 `--dry-run`、逐題結構檢核、同步 `referenceAnswer`/`explanation`/`aiContent`、執行全庫 `validate_questions` 與同目錄暫存檔原子替換 `os.replace`）；進度檔 `.essay-answer-checkpoint.json` 已加入 `.gitignore`。 |
+| `tools/generate_content_mc_explanations.py` | 以 OpenRouter API 批次產生選擇題內容導向解析；已強化金鑰與寫入防護，屬離線維運工具。 |
 | `tools/rebuild_mc_explanations.py` | 規則式重建選擇題解析；目前文字含「考選部標準答案」導向，若重跑可能覆蓋現有較佳內容，需先人工審查 diff。 |
 
 ---
@@ -198,7 +203,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 ## 3.1 題庫位置、數量與分類
 
-檔案：`questions.json`（JSON array，UTF-8，壓縮成單行，約 6.45 MB）。掃描時驗證結果：
+檔案：`questions.json`（JSON array，UTF-8，壓縮成單行，約 7.9 MB）。最新驗證結果（Commit `c8fc487`）：
 
 | 分類 | 題數 |
 |---|---:|
@@ -206,11 +211,12 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 | 選擇題 | 2,400 |
 | 申論題 | 160 |
 | 專技社工師 | 2,520（2,400 選擇 + 120 申論） |
-| 公職社工師 | 40（皆為申論） |
+| 公職社工師 | 40（皆為申論：社會工作實務 20 + 社會福利政策與法規 20） |
 | 有官方來源 metadata 的 115-2 題 | 210 |
 | 有 `acceptedAnswers` 官方更正容許答案 | 1 |
 | 有 `referenceAnswer` 的申論題 | 160 |
-| 有 `aiContent` 限制標示 | 10 |
+| 有 `essayGuide` 結構化起承轉合擬答與三類解析要點的申論題 | **160 / 160（100.0%）** |
+| 有 `aiContent` 非官方限制標示 | 160 |
 
 年份範圍為 2021–2026。五科各 504 題；公職兩科各 20 題。舊題多數沒有明示 `examType`，應依程式既有邏輯視為 `socialWorker`，不可誤判為缺失資料。
 
@@ -254,7 +260,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 }
 ```
 
-申論題格式：
+申論題格式（`v28` 結構化升級版；全題庫 160 題皆已完備 `essayGuide`，且前端保留舊版純文字 `referenceAnswer`／`explanation` 平滑降級相容）：
 
 ```json
 {
@@ -269,12 +275,26 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
   "answer": null,
   "questionPDF": "2021-1-0401-questions.pdf",
   "answerPDF": null,
-  "explanation": "起、承、轉、合的非官方擬答／作答方向",
-  "referenceAnswer": "非官方參考答案",
+  "explanation": "三類答題解析要點彙整文字（相容舊版欄位）",
+  "referenceAnswer": "起・承・轉・合完整擬答彙整文字（相容舊版欄位）",
+  "essayGuide": {
+    "modelAnswer": {
+      "qi": { "title": "破題與核心概念界定", "content": "……" },
+      "cheng": { "title": "理論依據與法規政策剖析", "content": "……" },
+      "zhuan": { "title": "實務應用、困境與批判反思", "content": "……" },
+      "he": { "title": "總結與具體建議展望", "content": "……" }
+    },
+    "analysis": {
+      "focusAndTraps": ["命題焦點與常見作答陷阱……"],
+      "theoriesAndLaws": ["核心理論、法規與實務依據……"],
+      "scoringRubric": ["【起】約 15%：……", "【承】約 50%：……"]
+    }
+  },
   "aiContent": {
-    "kind": "nonOfficialWritingFramework",
-    "generatedAt": "2026-10-31",
-    "limitations": "非考選部官方答案；不得作為法規或評分依據。"
+    "kind": "nonOfficialEssayAnswer",
+    "model": "antigravity-batch-v1",
+    "generatedAt": "2026-11-23",
+    "limitations": "本擬答與解析係由 AI 輔助整理之非考選部官方參考內容，僅供備考練習架構參考，不得作為法定評分或法規條文唯一依據。"
   }
 }
 ```
@@ -286,7 +306,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 - `subject` 白名單：專技五科或公職兩科，且要與 `examType` 相符。
 - `year`、`session`、`number` 必須是正整數；每份 `(examType, year, session, subject, type)` 試卷的題號需從 1 連續。
 - `multipleChoice`：恰四個非空 `options`，`answer` 為 A–D。
-- `essay`：`options` 必為 `[]`，`answer` 必為 `null`，`referenceAnswer` 必須是非空字串。
+- `essay`：`options` 必為 `[]`，`answer` 必為 `null`，`referenceAnswer` 必須是非空字串；若具 `essayGuide`，`modelAnswer` 須完整包含 `qi`、`cheng`、`zhuan`、`he` 四段非空 `{ title, content }`，且 `analysis` 須包含非空字串陣列 `focusAndTraps`、`theoriesAndLaws`、`scoringRubric`。
 - 若有 `acceptedAnswers`，必須為非空 A–D 陣列；實際判分使用它優先於 `answer`。
 - 若有 `source`，必須至少有 official URL、答案 URL、版本、核對日期與題卷／答案 SHA-256。
 
@@ -380,7 +400,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 }
 ```
 
-匯入會驗證 `app`、backup version 和 state 結構。它採 **merge，不覆寫／刪除**：收藏與錯題取聯集；累計 `answered`／`correct` 取較大值，避免沒有逐題歷史的舊資料被虛構或降低。注意：現有 `mergeLearningStates()` 未合併 attempts、reviews、notes、tags、mockExams、essayPractices 等進階資料；這是第 7 節列出的技術債，接手者若修正必須定義去重策略並新增測試。
+匯入會驗證 `app`、backup version 和所有進階 state 結構（`isValidLearningState()`）。它採 **確定性無損 merge，不覆寫／刪除**（已於 Commit `fa42f18` 完成重構與 4 組單元測試保護）：收藏與錯題取聯集；累計 `answered`／`correct` 取較大值；`attempts`（上限 5,000）、`reviews`、`mockExams`（上限 100）、`essayPractices`（上限 500）、`notes`／`errataNotes`（非破壞式冪等合併）、`tags`／`customTags` 與 `plan`／`resume` 皆會完整無損保留，匯入舊版 v1 備份亦不會清空本機 v2 進階學習資料。
 
 ---
 
@@ -408,8 +428,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 - 先 `importScripts('./sw-cache-policy.js')`。
 - cache namespace prefix 是 **`social-worker-quiz-pwa-`**，由 `sw-cache-policy.js` 統一管理。
-- 目前 active asset cache：`social-worker-quiz-pwa-assets-v26`。
-- 目前 active question data cache：`social-worker-quiz-pwa-data-v26`。
+- 目前 active asset cache：`social-worker-quiz-pwa-assets-v28`。
+- 目前 active question data cache：`social-worker-quiz-pwa-data-v28`。
 - install：對 `ASSETS` 的 HTML、CSS、JS、manifest、icons 執行 `cache.addAll()`。
 - activate：只刪除同 prefix 且不在 `[CACHE, DATA_CACHE]` 的舊 cache；同網域其他 GitHub Pages repo 的 caches 不會被刪除。
 - navigation request：**Network-first**；成功時把 `./` 緩存，網路失敗時回傳 cache 的 `./`。
@@ -421,9 +441,9 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 這是非常重要的操作程序。因 static resource 是 cache-first，**只改檔案內容不改 URL 很容易讓 PWA 留在舊版。**
 
-1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如 `app.js?build=26`、`knowledge-readability-fix.css?build=2`。
+1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=28`、`readability.css?build=28`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
 2. 在 `service-worker.js` 的 `ASSETS` 使用完全相同的新 URL。
-3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v26` → `v27`）。
+3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v28` → `v29`）。
 4. 確認新 cache 的 `ASSETS` 包含所有新增檔案；否則離線初次安裝會失敗，因 `cache.addAll()` 任一項失敗就會造成 install 失敗。
 5. 不要更改 `SWCachePolicy.CACHE_PREFIX`，除非有 migration 理由與 cache-isolation test。
 6. 以新瀏覽器 profile／實機 PWA 驗證：「更新」提示、更新後 reload、離線重新開啟與舊 cache 清除。
@@ -506,7 +526,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 | 分科模擬考 | 五科每科隨機 40 選擇題；計時、題號導覽、標記、交卷確認；交卷前不顯示答案。 | `renderMockSetup()`、`renderMock()`。 |
 | 五科連續模擬 | 五科各抽 40 題，合計 200 題，結果有分科統計。 | `renderMockSetup()`、`renderMockResult()`。 |
 | 歷屆完整試卷模式 | 題單剛好有 40 選擇題時可進入 historical paper mode。 | `renderList()` 的 `#paperMode`。 |
-| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項、擬答方向與參考答案。 | `renderEssayHtml()`、`saveEssayPractice()`。 |
+| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 升級為雙區塊結構化離線解答——【區塊 01：AI 參考擬答（起・承・轉・合）】可摺疊卡片＋一鍵複製＋非官方警語，以及【區塊 02：答題解析與得分要點】（命題焦點與陷阱、核心理論與法規依據、閱卷評分要點與配分建議），全庫 160 題 100% 完備並保留舊版純文字平滑降級相容。 | `renderEssayHtml()`、`saveEssayPractice()`、`readability.css`。 |
 | 筆記、標籤與勘誤 | 每題能寫筆記、加入／移除自訂標籤；顯示官方來源與更正答案；`errataNotes` 有資料結構但目前 UI 尚未提供新增輸入。 | `questionTools()`、`bindQuestionTools()`。 |
 | 備份與還原 | 匯出 JSON；選檔後驗證與安全合併，不刪現有摘要。 | `renderDataManagement()`、`data-store.js`。 |
 | 知識庫 | 知識卡搜尋、五科大補帖、理論導讀／歷史／內容／架構、具名學者原題、概念延伸題。 | `renderKnowledge()` + 知識 JS/CSS 模組。 |
@@ -521,10 +541,10 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 
 ## P0：資料與發布安全
 
-1. **local `main` 過期**：本地 `main` 在 `d40489b`，遠端 main 已到 `801f652`。第一次開發若未 fetch/pull 就修改／推送，很容易產生回退。先同步。
-2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
-3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`rebuild_mc_explanations.py` 會直接寫 `questions.json`（其中 `generate_content_mc_explanations.py` 已於本次重構加入寫入前 `validate_questions` 驗證與同目錄暫存檔原子替換）。務必在獨立分支執行、檢查 diff、跑全測試、保留官方來源與 hash；不可直接對 main 大批重跑。
-4. **~~OpenRouter script 的 token 風險~~（已完成修復／本次重構）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
+1. **~~local `main` 過期~~（已同步完成／HEAD `c8fc487`）**：本地 `main` 已與遠端 `origin/main` 完全同步；後續開發前仍應維持先 `git fetch origin`、`git status` 確認對齊再動工的紀律。
+2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v28`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
+3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`generate_essay_answers.py`、`rebuild_mc_explanations.py` 會寫入 `questions.json`（其中 `generate_content_mc_explanations.py` 與 `generate_essay_answers.py` 皆已內建寫入前 `validate_questions` 全庫驗證與同目錄暫存檔原子替換 `os.replace`）。仍須檢查 diff、跑全測試、保留官方來源與 hash。
+4. **~~OpenRouter script 的 token 風險~~（已完成修復／Commit `e883088`）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 
 ## P1：功能一致性與資料完整性
 
@@ -538,7 +558,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 ## P2：維護性、效能、設計與安全
 
 1. **`app.js` 過大**：單檔約 53 KB、字串模板密集、幾乎所有 UI 邏輯混在一起。可漸進抽出 `renderers/` 或 pure data functions，但避免全面框架重寫，以免破壞離線與本機資料。
-2. **題庫初始載入偏重**：6.45 MB JSON 要 parse、記憶體保存全陣列；低階 iPhone 可能出現載入等待。可評估分割題庫／預建 index／stream，但必須保留完整離線能力、資料 integrity validation 和 cache 策略。
+2. **題庫初始載入偏重**：約 7.9 MB JSON 要 parse、記憶體保存全陣列（含 2,400 題選擇詳解與 160 題完整結構化申論擬答）；低階 iPhone 可能出現載入等待。未來可評估依考科／年度分割題庫、預建 index 或 lazy load，但必須保留完整離線能力、資料 integrity validation 和 cache 策略。
 3. **沒有正式 bundler／lint／format**：無 ESLint、Prettier、typecheck、lockfile 或 CI；目前以人工 review、`git diff --check`、npm tests 補足。若新增工具，要先確認不增加不必要 runtime complexity。
 4. **沒有 E2E／真實 Safari 自動測試**：Node tests 未涵蓋 DOM、CSS、Service Worker 安裝、iOS 主畫面 PWA。發版前須人工驗證 iPhone Safari、iOS PWA、Mac Safari、Chrome。
 5. **dark-mode CSS 競爭**：`theme.css`、`readability.css` 與 knowledge hotfix 多層 override，特別是 `<details><summary>` 容易因 inherited color／背景出現低對比。修改知識庫 UI 一律檢視亮暗模式展開與收合狀態。
@@ -584,6 +604,9 @@ npm test
 
 # 僅題庫 structure
 python3 tools/validate_questions.py
+
+# 查看申論題結構化擬答覆蓋進度（目前 160 / 160，100.0%）
+python3 tools/generate_essay_answers.py --status
 
 # 僅官方 115-2 來源與答案／更正核對（需要網路 + pdftotext）
 python3 tools/verify_115_second_social_worker.py
