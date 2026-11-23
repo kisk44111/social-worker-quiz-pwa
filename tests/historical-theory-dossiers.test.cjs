@@ -8,6 +8,7 @@ function loadTheoryData() {
   vm.runInNewContext(fs.readFileSync('historical-theory-dossiers.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-related-concepts.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-theory-content.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('historical-theory-primers.js', 'utf8'), context);
   return context.window;
 }
 
@@ -54,5 +55,15 @@ test('每份理論檔案都有可連貫閱讀的理論內容、運作機制與�
     assert.ok(content?.claim?.length >= 35, `${dossier.id} 缺少核心主張說明`);
     assert.ok(content?.mechanism?.length >= 35, `${dossier.id} 缺少運作機制說明`);
     assert.ok(content?.practice?.length >= 35, `${dossier.id} 缺少實務／答題應用說明`);
+  }
+});
+
+test('每份理論檔案都有適合初學者的歷史脈絡、白話導讀與例子', () => {
+  const { historicalTheoryDossiers: dossiers, historicalTheoryPrimers: primers } = loadTheoryData();
+  for (const dossier of dossiers) {
+    const primer = primers[dossier.id];
+    assert.ok(primer?.background?.length >= 35, `${dossier.id} 缺少歷史脈絡導讀`);
+    assert.ok(primer?.plain?.length >= 45, `${dossier.id} 缺少白話核心說明`);
+    assert.ok(primer?.example?.length >= 35, `${dossier.id} 缺少入門例子`);
   }
 });
