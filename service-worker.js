@@ -1,10 +1,10 @@
 importScripts('./sw-cache-policy.js');
 
-const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v24`;
-const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v24`;
+const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v25`;
+const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v25`;
 const ASSETS = [
   './', './index.html', './styles.css?build=9', './theme.css?build=9',
-  './desktop.css?build=9', './readability.css?build=13', './knowledge-base.css?build=1', './exam-cram-guides.css?build=1', './historical-theory-dossiers.css?build=1', './data-store.js?build=15', './study-engine.js?build=16',
+  './desktop.css?build=9', './readability.css?build=13', './knowledge-base.css?build=1', './exam-cram-guides.css?build=1', './historical-theory-dossiers.css?build=1', './knowledge-readability-fix.css?build=1', './data-store.js?build=15', './study-engine.js?build=16',
   './knowledge-base.js?build=1', './exam-cram-guides.js?build=1', './historical-theory-dossiers.js?build=1', './historical-related-concepts.js?build=1', './historical-theory-content.js?build=1', './historical-theory-primers.js?build=1', './theory-completion.js?build=1', './theory-gap-additions.js?build=1', './theory-third-round.js?build=1', './app.js?build=25', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 
