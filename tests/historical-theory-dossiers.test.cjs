@@ -7,6 +7,7 @@ function loadTheoryData() {
   const context = { window: {} };
   vm.runInNewContext(fs.readFileSync('historical-theory-dossiers.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-related-concepts.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('historical-theory-content.js', 'utf8'), context);
   return context.window;
 }
 
@@ -43,5 +44,15 @@ test('每份理論檔案都有可說明的相關概念延伸題，且不混入�
       return question.subject === dossier.subject && !scholarTerms.some(term => text.includes(term)) && link.terms.some(term => text.includes(term));
     }).length;
     assert.ok(count > 0, `${dossier.theory} 未連回概念延伸題`);
+  }
+});
+
+test('每份理論檔案都有可連貫閱讀的理論內容、運作機制與應用說明', () => {
+  const { historicalTheoryDossiers: dossiers, historicalTheoryContent: contents } = loadTheoryData();
+  for (const dossier of dossiers) {
+    const content = contents[dossier.id];
+    assert.ok(content?.claim?.length >= 35, `${dossier.id} 缺少核心主張說明`);
+    assert.ok(content?.mechanism?.length >= 35, `${dossier.id} 缺少運作機制說明`);
+    assert.ok(content?.practice?.length >= 35, `${dossier.id} 缺少實務／答題應用說明`);
   }
 });
