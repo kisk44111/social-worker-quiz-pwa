@@ -18,6 +18,11 @@
     favorites: 'favorites', wrong: 'wrong', answered: 'answered', correct: 'correct', examType: 'examType'
   });
   const EXAM_TYPES = new Set(['socialWorker', 'publicSocialWorker']);
+  const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const MAX_ATTEMPTS = 5000;
+  const MAX_MOCK_EXAMS = 100;
+  const MAX_ESSAY_PRACTICES = 500;
+  const NOTE_MERGE_SEPARATOR = '\n---\n';
 
   const defaultState = () => ({
     schemaVersion: SCHEMA_VERSION,
@@ -26,15 +31,56 @@
     resume: null, plan: { weeklyGoal: 120, startDate: null }, notes: {}, tags: {}, customTags: [], errataNotes: {}, updatedAt: new Date().toISOString()
   });
 
+  const isPlainObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  const isSafeKey = key => typeof key === 'string' && key.trim() !== '' && !UNSAFE_KEYS.has(key);
   const uniqueStrings = value => Array.isArray(value)
     ? [...new Set(value.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim()))]
     : [];
   const nonNegativeInteger = value => Number.isFinite(Number(value)) && Number(value) >= 0
     ? Math.floor(Number(value)) : 0;
+  const toTimestamp = value => {
+    if (typeof value !== 'string' || !value) return -1;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : -1;
+  };
+  const normaliseStringMap = value => {
+    if (!isPlainObject(value)) return {};
+    const out = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (isSafeKey(key) && typeof item === 'string') out[key] = item;
+    }
+    return out;
+  };
+  const normaliseTagMap = value => {
+    if (!isPlainObject(value)) return {};
+    const out = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (isSafeKey(key) && Array.isArray(item)) out[key] = uniqueStrings(item);
+    }
+    return out;
+  };
+  const normaliseResume = value => {
+    if (!isPlainObject(value) || !Array.isArray(value.questionIds)) return null;
+    const questionIds = value.questionIds.filter(id => typeof id === 'string' && id.trim()).map(id => id.trim());
+    return {
+      ...value,
+      questionIds,
+      currentIndex: nonNegativeInteger(value.currentIndex)
+    };
+  };
+  const normalisePlan = (value, fallback) => {
+    if (!isPlainObject(value)) return { ...fallback };
+    const plan = {
+      weeklyGoal: nonNegativeInteger(value.weeklyGoal) || 120,
+      startDate: typeof value.startDate === 'string' && value.startDate.trim() ? value.startDate.trim() : null
+    };
+    if (typeof value.updatedAt === 'string' && value.updatedAt) plan.updatedAt = value.updatedAt;
+    return plan;
+  };
 
   function normaliseLearningState(value) {
     const base = defaultState();
-    const source = value && typeof value === 'object' ? value : {};
+    const source = isPlainObject(value) ? value : {};
     const answered = nonNegativeInteger(source.answered);
     const correct = Math.min(answered, nonNegativeInteger(source.correct));
     return {
@@ -44,29 +90,54 @@
       answered,
       correct,
       examType: EXAM_TYPES.has(source.examType) ? source.examType : base.examType,
-      attempts: Array.isArray(source.attempts) ? source.attempts.filter(item => item && typeof item.questionId === 'string' && typeof item.at === 'string' && typeof item.correct === 'boolean').slice(-5000) : [],
-      reviews: Array.isArray(source.reviews) ? source.reviews.filter(item => item && typeof item.questionId === 'string' && typeof item.dueAt === 'string') : [],
-      mockExams: Array.isArray(source.mockExams) ? source.mockExams.filter(item => item && typeof item.id === 'string' && Array.isArray(item.questionIds)).slice(-100) : [],
-      essayPractices: Array.isArray(source.essayPractices) ? source.essayPractices.filter(item => item && typeof item.id === 'string' && typeof item.questionId === 'string').slice(-500) : [],
-      resume: source.resume && typeof source.resume === 'object' && Array.isArray(source.resume.questionIds) ? source.resume : null,
-      plan: source.plan && typeof source.plan === 'object' ? { weeklyGoal: nonNegativeInteger(source.plan.weeklyGoal) || 120, startDate: typeof source.plan.startDate === 'string' ? source.plan.startDate : null } : base.plan,
-      notes: source.notes && typeof source.notes === 'object' && !Array.isArray(source.notes) ? source.notes : {},
-      tags: source.tags && typeof source.tags === 'object' && !Array.isArray(source.tags) ? source.tags : {},
+      attempts: Array.isArray(source.attempts) ? source.attempts.filter(item => isPlainObject(item) && typeof item.questionId === 'string' && typeof item.at === 'string' && typeof item.correct === 'boolean').slice(-MAX_ATTEMPTS) : [],
+      reviews: Array.isArray(source.reviews) ? source.reviews.filter(item => isPlainObject(item) && typeof item.questionId === 'string' && typeof item.dueAt === 'string') : [],
+      mockExams: Array.isArray(source.mockExams) ? source.mockExams.filter(item => isPlainObject(item) && typeof item.id === 'string' && Array.isArray(item.questionIds)).slice(-MAX_MOCK_EXAMS) : [],
+      essayPractices: Array.isArray(source.essayPractices) ? source.essayPractices.filter(item => isPlainObject(item) && typeof item.id === 'string' && typeof item.questionId === 'string').slice(-MAX_ESSAY_PRACTICES) : [],
+      resume: normaliseResume(source.resume),
+      plan: normalisePlan(source.plan, base.plan),
+      notes: normaliseStringMap(source.notes),
+      tags: normaliseTagMap(source.tags),
       customTags: uniqueStrings(source.customTags),
-      errataNotes: source.errataNotes && typeof source.errataNotes === 'object' && !Array.isArray(source.errataNotes) ? source.errataNotes : {},
+      errataNotes: normaliseStringMap(source.errataNotes),
       updatedAt: typeof source.updatedAt === 'string' && source.updatedAt ? source.updatedAt : base.updatedAt
     };
   }
 
+  const isStringMap = value => isPlainObject(value)
+    && Object.entries(value).every(([key, item]) => isSafeKey(key) && typeof item === 'string');
+  const isStringArrayMap = value => isPlainObject(value)
+    && Object.entries(value).every(([key, item]) => isSafeKey(key) && Array.isArray(item) && item.every(tag => typeof tag === 'string'));
+  const isValidPlan = value => isPlainObject(value)
+    && Number.isInteger(value.weeklyGoal) && value.weeklyGoal > 0
+    && (value.startDate === null || value.startDate === undefined || typeof value.startDate === 'string')
+    && (value.updatedAt === undefined || typeof value.updatedAt === 'string');
+  const isValidResume = value => value === null || (
+    isPlainObject(value)
+    && Array.isArray(value.questionIds)
+    && value.questionIds.every(id => typeof id === 'string')
+    && (value.currentIndex === undefined || (Number.isInteger(value.currentIndex) && value.currentIndex >= 0))
+    && (value.updatedAt === undefined || typeof value.updatedAt === 'string')
+  );
+
   function isValidLearningState(value) {
-    if (!value || typeof value !== 'object' || value.schemaVersion !== SCHEMA_VERSION) return false;
+    if (!isPlainObject(value) || value.schemaVersion !== SCHEMA_VERSION) return false;
     if (!Array.isArray(value.favorites) || !Array.isArray(value.wrong)) return false;
     if (!value.favorites.every(item => typeof item === 'string') || !value.wrong.every(item => typeof item === 'string')) return false;
-    return Number.isInteger(value.answered) && value.answered >= 0
+    if (!(Number.isInteger(value.answered) && value.answered >= 0
       && Number.isInteger(value.correct) && value.correct >= 0 && value.correct <= value.answered
-      && EXAM_TYPES.has(value.examType) && typeof value.updatedAt === 'string'
-      && Array.isArray(value.attempts) && Array.isArray(value.reviews) && Array.isArray(value.mockExams)
-      && Array.isArray(value.essayPractices);
+      && EXAM_TYPES.has(value.examType) && typeof value.updatedAt === 'string')) return false;
+    if (!Array.isArray(value.attempts) || !value.attempts.every(item => isPlainObject(item) && typeof item.questionId === 'string' && typeof item.at === 'string' && typeof item.correct === 'boolean')) return false;
+    if (!Array.isArray(value.reviews) || !value.reviews.every(item => isPlainObject(item) && typeof item.questionId === 'string' && typeof item.dueAt === 'string')) return false;
+    if (!Array.isArray(value.mockExams) || !value.mockExams.every(item => isPlainObject(item) && typeof item.id === 'string' && Array.isArray(item.questionIds) && item.questionIds.every(id => typeof id === 'string'))) return false;
+    if (!Array.isArray(value.essayPractices) || !value.essayPractices.every(item => isPlainObject(item) && typeof item.id === 'string' && typeof item.questionId === 'string')) return false;
+    if (value.resume !== undefined && !isValidResume(value.resume)) return false;
+    if (value.plan !== undefined && !isValidPlan(value.plan)) return false;
+    if (value.notes !== undefined && !isStringMap(value.notes)) return false;
+    if (value.tags !== undefined && !isStringArrayMap(value.tags)) return false;
+    if (value.customTags !== undefined && (!Array.isArray(value.customTags) || !value.customTags.every(item => typeof item === 'string'))) return false;
+    if (value.errataNotes !== undefined && !isStringMap(value.errataNotes)) return false;
+    return true;
   }
 
   function readLegacy(storage) {
@@ -94,7 +165,156 @@
     };
   }
 
+  function mergeAttempts(leftAttempts, rightAttempts) {
+    const byKey = new Map();
+    const attemptKey = item => (typeof item.id === 'string' && item.id.trim())
+      ? `id:${item.id.trim()}`
+      : `fallback:${item.questionId}|${item.at}|${item.answer ?? ''}`;
+    for (const item of [...leftAttempts, ...rightAttempts]) {
+      const key = attemptKey(item);
+      if (!byKey.has(key)) byKey.set(key, { ...item });
+    }
+    return [...byKey.values()]
+      .sort((a, b) => (toTimestamp(a.at) - toTimestamp(b.at)) || String(a.at).localeCompare(String(b.at)))
+      .slice(-MAX_ATTEMPTS);
+  }
+
+  function mergeReviews(leftReviews, rightReviews) {
+    const byQuestion = new Map();
+    const reviewTime = item => {
+      const reviewed = toTimestamp(item.lastReviewedAt);
+      if (reviewed >= 0) return reviewed;
+      const updated = toTimestamp(item.updatedAt);
+      if (updated >= 0) return updated;
+      return toTimestamp(item.dueAt);
+    };
+    for (const item of [...leftReviews, ...rightReviews]) {
+      const existing = byQuestion.get(item.questionId);
+      if (!existing || reviewTime(item) > reviewTime(existing)) {
+        byQuestion.set(item.questionId, { ...item });
+      }
+    }
+    return [...byQuestion.values()];
+  }
+
+  function mergeMockExams(leftMocks, rightMocks) {
+    const byId = new Map();
+    const mockTime = item => {
+      const completed = toTimestamp(item.completedAt);
+      if (completed >= 0) return completed;
+      const updated = toTimestamp(item.updatedAt);
+      if (updated >= 0) return updated;
+      return toTimestamp(item.startedAt);
+    };
+    const isCompleted = item => typeof item.completedAt === 'string' && item.completedAt.trim() !== '';
+    const answerCount = item => isPlainObject(item.answers) ? Object.keys(item.answers).length : 0;
+    const shouldReplace = (existing, candidate) => {
+      if (isCompleted(candidate) && !isCompleted(existing)) return true;
+      if (isCompleted(existing) && !isCompleted(candidate)) return false;
+      const diff = mockTime(candidate) - mockTime(existing);
+      if (diff !== 0) return diff > 0;
+      const elapsedDiff = nonNegativeInteger(candidate.elapsedSeconds) - nonNegativeInteger(existing.elapsedSeconds);
+      if (elapsedDiff !== 0) return elapsedDiff > 0;
+      return answerCount(candidate) > answerCount(existing);
+    };
+    for (const item of [...leftMocks, ...rightMocks]) {
+      const existing = byId.get(item.id);
+      if (!existing || shouldReplace(existing, item)) {
+        byId.set(item.id, { ...item });
+      }
+    }
+    return [...byId.values()]
+      .sort((a, b) => (mockTime(a) - mockTime(b)) || a.id.localeCompare(b.id))
+      .slice(-MAX_MOCK_EXAMS);
+  }
+
+  function mergeEssayPractices(leftEssays, rightEssays) {
+    const byQuestion = new Map();
+    const hasDraft = item => typeof item.draft === 'string' && item.draft.trim().length > 0;
+    const shouldReplace = (existing, candidate) => {
+      if (hasDraft(candidate) && !hasDraft(existing)) return true;
+      if (hasDraft(existing) && !hasDraft(candidate)) return false;
+      const diff = toTimestamp(candidate.updatedAt) - toTimestamp(existing.updatedAt);
+      if (diff !== 0) return diff > 0;
+      if (Boolean(candidate.completed) !== Boolean(existing.completed)) return Boolean(candidate.completed);
+      return nonNegativeInteger(candidate.elapsedSeconds) > nonNegativeInteger(existing.elapsedSeconds);
+    };
+    for (const item of [...leftEssays, ...rightEssays]) {
+      const existing = byQuestion.get(item.questionId);
+      if (!existing || shouldReplace(existing, item)) {
+        byQuestion.set(item.questionId, { ...item });
+      }
+    }
+    return [...byQuestion.values()]
+      .sort((a, b) => (toTimestamp(a.updatedAt) - toTimestamp(b.updatedAt)) || a.questionId.localeCompare(b.questionId))
+      .slice(-MAX_ESSAY_PRACTICES);
+  }
+
+  function mergeTextMaps(leftMap, rightMap) {
+    const merged = {};
+    const keys = new Set([...Object.keys(leftMap), ...Object.keys(rightMap)]);
+    const splitSegments = text => text.split(NOTE_MERGE_SEPARATOR).map(part => part.trim()).filter(Boolean);
+    for (const key of keys) {
+      if (!isSafeKey(key)) continue;
+      const leftText = typeof leftMap[key] === 'string' ? leftMap[key].trim() : '';
+      const rightText = typeof rightMap[key] === 'string' ? rightMap[key].trim() : '';
+      if (!leftText && !rightText) continue;
+      if (leftText && !rightText) { merged[key] = leftMap[key]; continue; }
+      if (!leftText && rightText) { merged[key] = rightMap[key]; continue; }
+      if (leftText === rightText) { merged[key] = leftMap[key]; continue; }
+      const segments = splitSegments(leftText);
+      const seen = new Set(segments);
+      for (const part of splitSegments(rightText)) {
+        if (!seen.has(part)) {
+          segments.push(part);
+          seen.add(part);
+        }
+      }
+      merged[key] = segments.join(NOTE_MERGE_SEPARATOR);
+    }
+    return merged;
+  }
+
+  function mergeTagMaps(leftMap, rightMap) {
+    const merged = {};
+    const keys = new Set([...Object.keys(leftMap), ...Object.keys(rightMap)]);
+    for (const key of keys) {
+      if (!isSafeKey(key)) continue;
+      const tags = uniqueStrings([...(leftMap[key] || []), ...(rightMap[key] || [])]);
+      if (tags.length) merged[key] = tags;
+    }
+    return merged;
+  }
+
+  function mergeResume(leftResume, rightResume, leftUpdatedAt, rightUpdatedAt) {
+    const leftValid = Boolean(leftResume && leftResume.questionIds.length);
+    const rightValid = Boolean(rightResume && rightResume.questionIds.length);
+    if (!leftValid && !rightValid) return leftResume || rightResume || null;
+    if (leftValid && !rightValid) return { ...leftResume };
+    if (!leftValid && rightValid) return { ...rightResume };
+    const leftTime = toTimestamp(leftResume.updatedAt);
+    const rightTime = toTimestamp(rightResume.updatedAt);
+    if (leftTime >= 0 || rightTime >= 0) {
+      return rightTime > leftTime ? { ...rightResume } : { ...leftResume };
+    }
+    return rightUpdatedAt > leftUpdatedAt ? { ...rightResume } : { ...leftResume };
+  }
+
+  function mergePlan(leftPlan, rightPlan, leftUpdatedAt, rightUpdatedAt) {
+    const isDefault = plan => !plan || (plan.weeklyGoal === 120 && plan.startDate === null);
+    const leftDefault = isDefault(leftPlan);
+    const rightDefault = isDefault(rightPlan);
+    if (leftDefault && rightDefault) return { ...leftPlan };
+    if (!leftDefault && rightDefault) return { ...leftPlan };
+    if (leftDefault && !rightDefault) return { ...rightPlan };
+    const leftTime = toTimestamp(leftPlan.updatedAt) >= 0 ? toTimestamp(leftPlan.updatedAt) : leftUpdatedAt;
+    const rightTime = toTimestamp(rightPlan.updatedAt) >= 0 ? toTimestamp(rightPlan.updatedAt) : rightUpdatedAt;
+    return rightTime > leftTime ? { ...rightPlan } : { ...leftPlan };
+  }
+
   function mergeLearningStates(current, incoming) {
+    const leftUpdatedAt = toTimestamp(isPlainObject(current) ? current.updatedAt : '');
+    const rightUpdatedAt = toTimestamp(isPlainObject(incoming) ? incoming.updatedAt : '');
     const left = normaliseLearningState(current), right = normaliseLearningState(incoming);
     return normaliseLearningState({
       favorites: [...left.favorites, ...right.favorites],
@@ -104,6 +324,16 @@
       answered: Math.max(left.answered, right.answered),
       correct: Math.max(left.correct, right.correct),
       examType: right.examType || left.examType,
+      attempts: mergeAttempts(left.attempts, right.attempts),
+      reviews: mergeReviews(left.reviews, right.reviews),
+      mockExams: mergeMockExams(left.mockExams, right.mockExams),
+      essayPractices: mergeEssayPractices(left.essayPractices, right.essayPractices),
+      resume: mergeResume(left.resume, right.resume, leftUpdatedAt, rightUpdatedAt),
+      plan: mergePlan(left.plan, right.plan, leftUpdatedAt, rightUpdatedAt),
+      notes: mergeTextMaps(left.notes, right.notes),
+      tags: mergeTagMaps(left.tags, right.tags),
+      customTags: [...left.customTags, ...right.customTags],
+      errataNotes: mergeTextMaps(left.errataNotes, right.errataNotes),
       updatedAt: new Date().toISOString()
     });
   }
