@@ -1,3 +1,5 @@
 .mc-explanation-checkpoint.json
 .essay-answer-checkpoint.json
+.notebooklm-exports/
+.swq-notebooklm-profile/
 __pycache__/

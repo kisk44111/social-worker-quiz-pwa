@@ -11,7 +11,7 @@
 
 ### Git 快照
 
-- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v31` 高擬真語音聽讀、NotebookLM／Gemini 自然口語講稿匯出與骨架盲測功能。
+- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v32` 鎖屏保活語音聽讀、NotebookLM 自動同步與直連工具及骨架盲測功能。
 - GitHub Pages 使用 **legacy Pages**，來源是 `main` 分支根目錄 `/`，不是 Actions artifact，也不是 `gh-pages` 分支。
 - 近期核心里程碑（皆已合併並部署至 `origin/main`）：
   - `fa42f18`：`data-store.js` 補齊進階欄位驗證與確定性無損備份合併，新增 4 組測試並升級 PWA 至 `v27`。
@@ -20,7 +20,8 @@
   - `7c9c349`、`1072885`、`13fa297`、`5b851e6`、`40e6138`、`e1c98fa`、`c8fc487`：分科完成**專技社工師五科（120 題）＋公職社工師兩科（40 題）共 160 / 160 題（100.0%）**結構化申論擬答與解析匯入，且全程通過 `npm test` 驗證。
   - `680281b`（`v29`）：新增純原生申論考前衝刺雙工具——Web Speech API 申論聽讀播放器（單題分段高亮、語速、通勤連播）與骨架盲測（主動回憶）訓練模式，新增 `essay-study-tools.js` 與測試。
   - `09f3479`（`v30`）：全面升級申論語音自然度——最高優先權排序高擬真神經網路中文語音、新增「🎙 朗讀聲音」下拉選單（`localStorage` `swq_essay_speech_voice`）、中文口語前處理與三層氣口呼吸停頓排程及柔和語調微調。
-  - **`v31`（已部署）**：新增零 API 依賴之**「🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）」**——於 `essay-study-tools.js` 實作 `formatEssayForNaturalAudio` 與整科講稿打包器，前端提供「📋 複製單題口語講稿」與「📦 匯出本考科講稿（.txt）」一鍵下載，並強化 Edge `★ HsiaoChen Online (Natural)` 引導提示，擴充測試至 10 項並同步升級 PWA 快取至 `v31`。
+  - `06e2348`（`v31`）：新增零 API 依賴之「🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）」單題複製與整科 `.txt` 匯出。
+  - **`v32`（已部署）**：新增本機自動化工具 `tools/sync_notebooklm.py`（支援 `--dry-run`、`--export-only` 與獨立家目錄 Chrome Profile 之 Playwright 自動匯入 NotebookLM 及 `--generate-audio`）；修復手機鎖屏語音中斷（Web Audio + 靜音 PCM `<audio>` 保活、Media Session API 鎖屏控制卡片、鎖屏背景無延遲接句與 `visibilitychange` 斷點續播）；前端新增「🚀 複製講稿並開啟 NotebookLM」與「🎙 複製 Podcast 雙人對談提示詞」，同步升級 PWA 快取至 `v32`。
 - 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則
@@ -131,6 +132,7 @@
     ├── import_115_second_social_worker.py
     ├── import_public_social_worker.py
     ├── rebuild_mc_explanations.py
+    ├── sync_notebooklm.py
     ├── validate_questions.py
     └── verify_115_second_social_worker.py
 ```
@@ -187,14 +189,14 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 | 檔案 | 說明 |
 |---|---|
-| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 39 項）。 |
-| `tests/essay-study-tools.test.cjs` | 高擬真中文語音排序與使用者偏好解析、口語化文本前處理、三層氣口停頓佇列、NotebookLM／Gemini 自然口語講稿轉換與整科 `.txt` 打包、混合題單通勤連播索引與盲測單段揭曉 10 項測試。 |
+| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 40 項）。 |
+| `tests/essay-study-tools.test.cjs` | 高擬真中文語音排序與使用者偏好解析、口語化文本前處理、三層氣口停頓佇列、NotebookLM／Gemini 自然口語講稿轉換與提示詞、鎖屏跳過延遲判斷、混合題單通勤連播索引與盲測單段揭曉 11 項測試。 |
 | `tests/study-engine.test.cjs` | 1/3/7/14 天複習、統計、已更正答案計分、加權推薦、週趨勢。 |
 | `tests/sw-cache-policy.test.cjs` | 快取隔離，避免刪到同 GitHub Pages 網域其他專案。 |
 | `tests/knowledge-base.test.cjs` | 卡片結構、來源索引與五科覆蓋。 |
 | `tests/exam-cram-guides.test.cjs` | 五科補帖完整性與每單元至少一題關聯歷屆題。 |
 | `tests/historical-theory-dossiers.test.cjs` | 理論／導讀／架構／概念延伸與實題連結完整性。 |
-| `tests/test_questions_validation.py` | 對 `tools.validate_questions`、`essayGuide` 結構驗證與 `tools.generate_essay_answers` 離線批次匯入流程的 7 項 Python unittest。 |
+| `tests/test_questions_validation.py` | 對 `tools.validate_questions`、`essayGuide` 結構驗證、`tools.generate_essay_answers` 離線批次匯入及 `tools.sync_notebooklm` 講稿打包／Profile 安全防護的 8 項 Python unittest。 |
 | `tools/validate_questions.py` | release 前題庫 schema、ID、科別、題型、選項、答案、題號連續性與 `essayGuide` 結構驗證器。 |
 | `tools/import_115_second_social_worker.py` | 115 年第二次五科官方 PDF importer；fail-closed，預期每科 2 申論 + 40 選擇與 40 官方答案。 |
 | `tools/verify_115_second_social_worker.py` | 重新下載官方答案／更正 PDF，比對題庫答案與 SHA-256。需要網路與 `pdftotext`。 |
@@ -202,6 +204,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 | `tools/add_115_second_essay_guides.py` | 早期為 115-2 十題申論補「非官方」起承轉合作答架構之腳本（現已由全庫 `essayGuide` 取代升級）。 |
 | `tools/generate_essay_answers.py` | 零付費 API、零本機模型依賴之申論題離線批次工具：支援 `--status`（盤點各科進度）、`--export-batch`（匯出標準化題組任務包供 Gemini／Antigravity 撰寫）與 `--import-json`（含 `--dry-run`、逐題結構檢核、同步 `referenceAnswer`/`explanation`/`aiContent`、執行全庫 `validate_questions` 與同目錄暫存檔原子替換 `os.replace`）；進度檔 `.essay-answer-checkpoint.json` 已加入 `.gitignore`。 |
 | `tools/generate_content_mc_explanations.py` | 以 OpenRouter API 批次產生選擇題內容導向解析；已強化金鑰與寫入防護，屬離線維運工具。 |
+| `tools/sync_notebooklm.py` | 本機 NotebookLM 自動化同步與有聲書講稿工具：讀取 160 題申論按 7 科組裝自然口語講稿，支援 `--dry-run` 預覽、`--export-only` 離線輸出，以及以家目錄獨立 Chrome Profile（`~/.cache/swq-notebooklm-profile`，嚴禁置於 Git 儲存庫內）透過 Playwright 自動匯入 NotebookLM 並可選 `--generate-audio`。 |
 | `tools/rebuild_mc_explanations.py` | 規則式重建選擇題解析；目前文字含「考選部標準答案」導向，若重跑可能覆蓋現有較佳內容，需先人工審查 diff。 |
 
 ---
@@ -435,8 +438,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 - 先 `importScripts('./sw-cache-policy.js')`。
 - cache namespace prefix 是 **`social-worker-quiz-pwa-`**，由 `sw-cache-policy.js` 統一管理。
-- 目前 active asset cache：`social-worker-quiz-pwa-assets-v31`。
-- 目前 active question data cache：`social-worker-quiz-pwa-data-v31`。
+- 目前 active asset cache：`social-worker-quiz-pwa-assets-v32`。
+- 目前 active question data cache：`social-worker-quiz-pwa-data-v32`。
 - install：對 `ASSETS` 的 HTML、CSS、JS、manifest、icons 執行 `cache.addAll()`。
 - activate：只刪除同 prefix 且不在 `[CACHE, DATA_CACHE]` 的舊 cache；同網域其他 GitHub Pages repo 的 caches 不會被刪除。
 - navigation request：**Network-first**；成功時把 `./` 緩存，網路失敗時回傳 cache 的 `./`。
@@ -448,9 +451,9 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 這是非常重要的操作程序。因 static resource 是 cache-first，**只改檔案內容不改 URL 很容易讓 PWA 留在舊版。**
 
-1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=31`、`readability.css?build=31`、`essay-study-tools.js?build=31`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
+1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=32`、`readability.css?build=32`、`essay-study-tools.js?build=32`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
 2. 在 `service-worker.js` 的 `ASSETS` 使用完全相同的新 URL。
-3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v31` → `v32`）。
+3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v32` → `v33`）。
 4. 確認新 cache 的 `ASSETS` 包含所有新增檔案；否則離線初次安裝會失敗，因 `cache.addAll()` 任一項失敗就會造成 install 失敗。
 5. 不要更改 `SWCachePolicy.CACHE_PREFIX`，除非有 migration 理由與 cache-isolation test。
 6. 以新瀏覽器 profile／實機 PWA 驗證：「更新」提示、更新後 reload、離線重新開啟與舊 cache 清除。
@@ -533,7 +536,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 | 分科模擬考 | 五科每科隨機 40 選擇題；計時、題號導覽、標記、交卷確認；交卷前不顯示答案。 | `renderMockSetup()`、`renderMock()`。 |
 | 五科連續模擬 | 五科各抽 40 題，合計 200 題，結果有分科統計。 | `renderMockSetup()`、`renderMockResult()`。 |
 | 歷屆完整試卷模式 | 題單剛好有 40 選擇題時可進入 historical paper mode。 | `renderList()` 的 `#paperMode`。 |
-| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 雙區塊結構化離線解答（起・承・轉・合擬答＋三類解析要點，全庫 160 題 100% 完備）；`v29`–`v31` 升級 Web Speech API 高擬真語音聽讀播放器（高擬真神經網路語音優先排序、手動中文語音切換器、自然口語前處理與三層氣口停頓、分段高亮、`1.0x/1.25x/1.5x` 語速、通勤連播）、**NotebookLM／Gemini 自然口語講稿單題複製與整科 `.txt` 匯出**及骨架盲測（主動回憶）訓練開關。 | `renderEssayHtml()`、`renderEssaySprintBarHtml()`、`essay-study-tools.js`、`readability.css`。 |
+| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 雙區塊結構化離線解答（起・承・轉・合擬答＋三類解析要點，全庫 160 題 100% 完備）；`v29`–`v32` 升級 Web Speech API 高擬真語音聽讀播放器（高擬真神經網路語音優先排序、手動中文語音切換器、自然口語前處理與三層氣口停頓、手機鎖屏背景保活＋Media Session 控制＋斷點自動恢復、分段高亮、`1.0x/1.25x/1.5x` 語速、通勤連播）、**NotebookLM 一鍵直連／Podcast 提示詞／口語講稿匯出**及骨架盲測（主動回憶）訓練開關。 | `renderEssayHtml()`、`renderEssaySprintBarHtml()`、`essay-study-tools.js`、`readability.css`。 |
 | 筆記、標籤與勘誤 | 每題能寫筆記、加入／移除自訂標籤；顯示官方來源與更正答案；`errataNotes` 有資料結構但目前 UI 尚未提供新增輸入。 | `questionTools()`、`bindQuestionTools()`。 |
 | 備份與還原 | 匯出 JSON；選檔後驗證與安全合併，不刪現有摘要。 | `renderDataManagement()`、`data-store.js`。 |
 | 知識庫 | 知識卡搜尋、五科大補帖、理論導讀／歷史／內容／架構、具名學者原題、概念延伸題。 | `renderKnowledge()` + 知識 JS/CSS 模組。 |
@@ -549,7 +552,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 ## P0：資料與發布安全
 
 1. **~~local `main` 過期~~（已同步完成／HEAD `c8fc487`）**：本地 `main` 已與遠端 `origin/main` 完全同步；後續開發前仍應維持先 `git fetch origin`、`git status` 確認對齊再動工的紀律。
-2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v31`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
+2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v32`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
 3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`generate_essay_answers.py`、`rebuild_mc_explanations.py` 會寫入 `questions.json`（其中 `generate_content_mc_explanations.py` 與 `generate_essay_answers.py` 皆已內建寫入前 `validate_questions` 全庫驗證與同目錄暫存檔原子替換 `os.replace`）。仍須檢查 diff、跑全測試、保留官方來源與 hash。
 4. **~~OpenRouter script 的 token 風險~~（已完成修復／Commit `e883088`）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 
@@ -614,6 +617,9 @@ python3 tools/validate_questions.py
 
 # 查看申論題結構化擬答覆蓋進度（目前 160 / 160，100.0%）
 python3 tools/generate_essay_answers.py --status
+
+# 預覽 NotebookLM 7 科申論口語講稿結構（不啟動瀏覽器）
+python3 tools/sync_notebooklm.py --dry-run
 
 # 僅官方 115-2 來源與答案／更正核對（需要網路 + pdftotext）
 python3 tools/verify_115_second_social_worker.py

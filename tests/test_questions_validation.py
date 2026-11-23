@@ -127,6 +127,33 @@ class QuestionValidationTests(unittest.TestCase):
             report_after = essay_gen.format_status_report(saved)
             self.assertIn("已完成 1 / 1 題", report_after)
 
+    def test_sync_notebooklm_packs_export_and_profile_guard(self):
+        from tools import sync_notebooklm
+
+        essay = sample_essay()
+        essay["essayGuide"] = valid_essay_guide()
+        packs = sync_notebooklm.build_subject_packs([essay], exam_type_filter="all")
+        self.assertEqual(len(packs), 1)
+        self.assertEqual(packs[0]["subject"], "社會工作")
+        self.assertIn("這題在考的核心概念是", packs[0]["content"])
+        self.assertIn("資深社工督導", packs[0]["promptGuide"])
+
+        with self.assertRaises(ValueError):
+            sync_notebooklm.assert_profile_outside_repo(sync_notebooklm.REPO_ROOT / ".swq-notebooklm-profile")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            data_path = tmp_dir / "questions.json"
+            export_dir = tmp_dir / "out"
+            data_path.write_text(json.dumps([essay], ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(sync_notebooklm.main(["--questions", str(data_path), "--dry-run"]), 0)
+            self.assertEqual(
+                sync_notebooklm.main(["--questions", str(data_path), "--export-only", str(export_dir)]),
+                0,
+            )
+            exported_files = list(export_dir.glob("*.txt"))
+            self.assertEqual(len(exported_files), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

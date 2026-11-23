@@ -374,6 +374,22 @@
     return `社工師口語講稿-${safeSubject}${suffix}.txt`;
   }
 
+  function buildNotebookLmPodcastPrompt(subjectName, examLabel) {
+    const subject = cleanSpeechText(subjectName || '社工師申論題');
+    const exam = cleanSpeechText(examLabel || '社工師考試');
+    return (
+      `請以繁體中文（臺灣用語）製作「${exam}・${subject}」考前申論衝刺深度對談 Podcast。` +
+      '設定兩位主持人皆為台灣資深社工督導兼國考閱卷輔導老師，語氣溫暖自然、節奏俐落不照稿唸，逐題拆解：\n' +
+      '1. 審題破題與「起・承・轉・合」四段答題骨架；\n' +
+      '2. 台灣在地保護性、脆弱家庭、長照或社區第一線實務案例與常見困境反思；\n' +
+      '3. 國考必背核心理論、學者觀點、法規名稱與閱卷給分關鍵字，避免空泛口號並於每題結尾用一句話幫考生記憶。'
+    );
+  }
+
+  function shouldSkipSpeechPause(visibilityState) {
+    return visibilityState === 'hidden';
+  }
+
   function effectivePauseMs(basePauseMs, rate) {
     const base = Number(basePauseMs);
     if (!Number.isFinite(base) || base <= 0) return 0;
@@ -523,6 +539,8 @@
     formatEssayForNaturalAudio,
     buildSubjectNaturalAudioExport,
     buildNaturalAudioFilename,
+    buildNotebookLmPodcastPrompt,
+    shouldSkipSpeechPause,
     effectivePauseMs,
     isNeuralVoice,
     scoreVoice,

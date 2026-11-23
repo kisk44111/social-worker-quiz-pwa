@@ -206,3 +206,14 @@ test('buildSubjectNaturalAudioExport and buildNaturalAudioFilename package multi
   assert.ok(!exported.includes('忽略選擇題'));
   assert.equal(tools.buildNaturalAudioFilename('社會工作', 24), '社工師口語講稿-社會工作-24題.txt');
 });
+
+test('buildNotebookLmPodcastPrompt and shouldSkipSpeechPause support NotebookLM launch and background TTS resilience', () => {
+  const prompt = tools.buildNotebookLmPodcastPrompt('社會工作研究方法', '專技社工師');
+  assert.ok(prompt.includes('專技社工師'));
+  assert.ok(prompt.includes('社會工作研究方法'));
+  assert.ok(prompt.includes('起・承・轉・合'));
+  assert.ok(prompt.includes('台灣資深社工督導'));
+
+  assert.equal(tools.shouldSkipSpeechPause('hidden'), true);
+  assert.equal(tools.shouldSkipSpeechPause('visible'), false);
+});

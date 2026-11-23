@@ -224,6 +224,106 @@ function syncEssaySpeechUI(scrollActive=false){
     try{activeEl.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(_){}
   }
 }
+let keepAliveAudioCtx=null, keepAliveGain=null, keepAliveOsc=null, keepAliveAudioEl=null, keepAliveBlobUrl=null;
+function buildSilentWavBlobUrl(){
+  if(keepAliveBlobUrl)return keepAliveBlobUrl;
+  const sampleRate=8000, numSamples=sampleRate, buffer=new ArrayBuffer(44+numSamples), view=new DataView(buffer);
+  const writeStr=(offset,str)=>{for(let i=0;i<str.length;i++)view.setUint8(offset+i,str.charCodeAt(i))};
+  writeStr(0,'RIFF');view.setUint32(4,36+numSamples,true);writeStr(8,'WAVE');
+  writeStr(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,sampleRate,true);view.setUint32(28,sampleRate,true);view.setUint16(32,1,true);view.setUint16(34,8,true);
+  writeStr(36,'data');view.setUint32(40,numSamples,true);
+  new Uint8Array(buffer,44).fill(128);
+  keepAliveBlobUrl=URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
+  return keepAliveBlobUrl;
+}
+function startSilentAudioKeepAlive(){
+  try{
+    if(typeof Audio==='function'){
+      if(!keepAliveAudioEl){
+        keepAliveAudioEl=new Audio(buildSilentWavBlobUrl());
+        keepAliveAudioEl.loop=true;
+        keepAliveAudioEl.volume=0.001;
+        keepAliveAudioEl.setAttribute('playsinline','');
+      }
+      const p=keepAliveAudioEl.play();
+      if(p&&typeof p.catch==='function')p.catch(()=>{});
+    }
+  }catch(_){}
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(AudioCtx){
+      if(!keepAliveAudioCtx){
+        keepAliveAudioCtx=new AudioCtx();
+        keepAliveGain=keepAliveAudioCtx.createGain();
+        keepAliveGain.gain.value=0.0001;
+        keepAliveOsc=keepAliveAudioCtx.createOscillator();
+        keepAliveOsc.frequency.value=200;
+        keepAliveOsc.connect(keepAliveGain);
+        keepAliveGain.connect(keepAliveAudioCtx.destination);
+        keepAliveOsc.start();
+      }
+      if(keepAliveAudioCtx.state==='suspended')keepAliveAudioCtx.resume().catch(()=>{});
+    }
+  }catch(_){}
+}
+function stopSilentAudioKeepAlive(){
+  try{if(keepAliveAudioEl){keepAliveAudioEl.pause();keepAliveAudioEl.currentTime=0}}catch(_){}
+  try{if(keepAliveAudioCtx&&keepAliveAudioCtx.state==='running')keepAliveAudioCtx.suspend().catch(()=>{})}catch(_){}
+}
+function navigateEssayForSpeech(targetIndex){
+  if(targetIndex<0||targetIndex>=state.currentList.length)return;
+  const sp=state.essaySpeech;
+  clearSpeechTimers();
+  sp.sessionId++;
+  if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+  state.currentIndex=targetIndex;
+  saveResume();
+  const nextQ=state.currentList[state.currentIndex];
+  sp.questionId=nextQ.id;
+  renderQuestion();
+  startEssaySpeech(nextQ);
+}
+function updateEssayMediaSession(q,playbackState){
+  if(typeof navigator==='undefined'||!('mediaSession'in navigator))return;
+  try{
+    const ms=navigator.mediaSession;
+    ms.playbackState=playbackState;
+    if(q&&typeof window.MediaMetadata==='function'){
+      const examLabel=examConfigs[examOf(q)]?.label||'社工師考試';
+      const stageInfo=state.essaySpeech.activeLabel?`・${state.essaySpeech.activeLabel}`:'';
+      ms.metadata=new window.MediaMetadata({
+        title:`${q.year}第${q.session}次｜${q.subject}${stageInfo}`,
+        artist:'台灣社工師歷屆題庫・申論聽讀',
+        album:examLabel,
+        artwork:[
+          {src:'./icon-192.png',sizes:'192x192',type:'image/png'},
+          {src:'./icon-512.png',sizes:'512x512',type:'image/png'}
+        ]
+      });
+    }
+    const safeHandler=(action,fn)=>{try{ms.setActionHandler(action,fn)}catch(_){}};
+    if(playbackState==='none'){
+      ['play','pause','stop','previoustrack','nexttrack'].forEach(a=>safeHandler(a,null));
+      return;
+    }
+    safeHandler('play',()=>{
+      const cur=state.currentList[state.currentIndex];
+      if(cur&&cur.type==='essay')resumeEssaySpeech(cur);
+    });
+    safeHandler('pause',()=>pauseEssaySpeech());
+    safeHandler('stop',()=>stopEssaySpeech());
+    safeHandler('previoustrack',()=>{
+      const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{prevIndex:-1};
+      if(pos.prevIndex>=0)navigateEssayForSpeech(pos.prevIndex);
+      else{const cur=state.currentList[state.currentIndex];if(cur&&cur.type==='essay')startEssaySpeech(cur)}
+    });
+    safeHandler('nexttrack',()=>{
+      const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{nextIndex:-1};
+      if(pos.nextIndex>=0)navigateEssayForSpeech(pos.nextIndex);
+    });
+  }catch(_){}
+}
 function clearSpeechTimers(){
   const sp=state.essaySpeech;
   if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
@@ -232,6 +332,8 @@ function clearSpeechTimers(){
 function stopEssaySpeech(note=''){
   const sp=state.essaySpeech;
   clearSpeechTimers();
+  stopSilentAudioKeepAlive();
+  updateEssayMediaSession(null,'none');
   sp.sessionId++;
   if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
   sp.status='idle';
@@ -253,6 +355,11 @@ function speakCurrentEssayChunk(q){
     if(sp.continuous){
       const nextIdx=window.essayStudyTools?window.essayStudyTools.findNextEssayIndex(state.currentList,state.currentIndex):-1;
       if(nextIdx>=0){
+        const isHidden=window.essayStudyTools?window.essayStudyTools.shouldSkipSpeechPause(document.visibilityState):document.visibilityState==='hidden';
+        if(isHidden){
+          navigateEssayForSpeech(nextIdx);
+          return;
+        }
         const mySession=sp.sessionId;
         sp.statusNote='本題朗讀完成，即將連播下一題⋯';
         sp.activeSegment=null;
@@ -260,12 +367,7 @@ function speakCurrentEssayChunk(q){
         sp.autoNextTimer=setTimeout(()=>{
           if(sp.sessionId!==mySession||state.view!=='question')return;
           sp.autoNextTimer=null;
-          state.currentIndex=nextIdx;
-          saveResume();
-          const nextQ=state.currentList[state.currentIndex];
-          sp.questionId=nextQ.id;
-          renderQuestion();
-          startEssaySpeech(nextQ);
+          navigateEssayForSpeech(nextIdx);
         },650);
         return;
       }
@@ -282,6 +384,7 @@ function speakCurrentEssayChunk(q){
   sp.activeLabel=chunk.label;
   sp.statusNote='';
   syncEssaySpeechUI(segmentChanged);
+  updateEssayMediaSession(q,'playing');
   const utter=new window.SpeechSynthesisUtterance(chunk.text);
   const voice=resolveActiveVoice();
   utter.lang=voice?.lang||'zh-TW';
@@ -296,7 +399,8 @@ function speakCurrentEssayChunk(q){
       speakCurrentEssayChunk(q);
       return;
     }
-    const pauseMs=window.essayStudyTools?window.essayStudyTools.effectivePauseMs(chunk.pauseAfterMs,sp.rate):200;
+    const skipPause=window.essayStudyTools?window.essayStudyTools.shouldSkipSpeechPause(document.visibilityState):document.visibilityState==='hidden';
+    const pauseMs=skipPause?0:(window.essayStudyTools?window.essayStudyTools.effectivePauseMs(chunk.pauseAfterMs,sp.rate):200);
     if(pauseMs>0){
       sp.pauseTimer=setTimeout(()=>{
         if(sp.sessionId!==mySession||sp.status!=='playing')return;
@@ -322,6 +426,7 @@ function startEssaySpeech(q){
   if(!queue.length){stopEssaySpeech('本題尚無可朗讀文字');return}
   const sp=state.essaySpeech;
   clearSpeechTimers();
+  startSilentAudioKeepAlive();
   sp.sessionId++;
   try{window.speechSynthesis.cancel()}catch(_){}
   sp.questionId=q.id;
@@ -337,20 +442,40 @@ function pauseEssaySpeech(){
   const sp=state.essaySpeech;
   if(sp.status!=='playing')return;
   clearSpeechTimers();
+  stopSilentAudioKeepAlive();
   sp.sessionId++;
   if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
   sp.status='paused';
   sp.statusNote='';
+  const cur=state.currentList[state.currentIndex];
+  updateEssayMediaSession(cur&&cur.type==='essay'?cur:null,'paused');
   syncEssaySpeechUI(false);
 }
 function resumeEssaySpeech(q){
   const sp=state.essaySpeech;
   if(sp.status!=='paused'||sp.questionId!==q.id||!sp.chunks.length){startEssaySpeech(q);return}
   clearSpeechTimers();
+  startSilentAudioKeepAlive();
   sp.sessionId++;
   sp.status='playing';
   sp.statusNote='';
   speakCurrentEssayChunk(q);
+}
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible')return;
+    const sp=state.essaySpeech;
+    if(sp.status!=='playing'||!isSpeechSupported()||state.view!=='question')return;
+    const cur=state.currentList[state.currentIndex];
+    if(!cur||cur.id!==sp.questionId||!sp.chunks.length)return;
+    if(sp.pauseTimer||sp.autoNextTimer)return;
+    if(!window.speechSynthesis.speaking&&!window.speechSynthesis.pending){
+      sp.sessionId++;
+      try{window.speechSynthesis.cancel()}catch(_){}
+      startSilentAudioKeepAlive();
+      speakCurrentEssayChunk(cur);
+    }
+  });
 }
 function setEssaySpeechRate(rate,q){
   const sp=state.essaySpeech;
@@ -500,6 +625,8 @@ function renderEssaySprintBarHtml(q){
   const exportControls=`<div class="essay-export-row">
     <div class="essay-export-head"><span>🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）</span></div>
     <div class="essay-export-actions">
+      <button type="button" class="essay-sprint-btn essay-export-primary" id="copyAndOpenNotebookLm">🚀 複製講稿並開啟 NotebookLM</button>
+      <button type="button" class="essay-sprint-btn essay-export-btn" id="copyPodcastPrompt">🎙 複製 Podcast 雙人對談提示詞</button>
       <button type="button" class="essay-sprint-btn essay-export-btn" id="copyNaturalAudio">📋 複製單題口語講稿</button>
       <button type="button" class="essay-sprint-btn essay-export-btn" id="exportSubjectAudioTxt">📦 匯出本考科講稿（${exportEssays.length} 題 .txt）</button>
     </div>
@@ -640,6 +767,39 @@ function renderQuestion(){
       if(!fb)return;
       fb.textContent=msg;
       fb.classList.remove('hidden');
+    };
+    if($('#copyAndOpenNotebookLm'))$('#copyAndOpenNotebookLm').onclick=async()=>{
+      const btn=$('#copyAndOpenNotebookLm');
+      const exportEssays=getSubjectExportEssays(q);
+      const examLabel=examConfigs[examOf(q)]?.label||'社工師考試';
+      const content=window.essayStudyTools
+        ? window.essayStudyTools.buildSubjectNaturalAudioExport(exportEssays,q.subject,examLabel)
+        : exportEssays.map(buildEssayCopyText).join('\n\n---\n\n');
+      try{
+        await copyTextToClipboard(content);
+        btn.textContent='✓ 已複製講稿並開啟 NotebookLM';
+        showExportFeedback(`已複製「${q.subject}」（共 ${exportEssays.length} 題）口語講稿並開啟 NotebookLM！進入筆記本後點選「新增來源 → 貼上的文字」即可貼上`);
+      }catch(_){
+        showExportFeedback('已為您開啟 NotebookLM；若剪貼簿受限，可改按「匯出本考科講稿（.txt）」直接上傳檔案。');
+      }
+      window.open('https://notebooklm.google.com/','_blank','noopener');
+      setTimeout(()=>{if($('#copyAndOpenNotebookLm'))$('#copyAndOpenNotebookLm').textContent='🚀 複製講稿並開啟 NotebookLM'},2800);
+    };
+    if($('#copyPodcastPrompt'))$('#copyPodcastPrompt').onclick=async()=>{
+      const btn=$('#copyPodcastPrompt');
+      const examLabel=examConfigs[examOf(q)]?.label||'社工師考試';
+      const promptText=window.essayStudyTools
+        ? window.essayStudyTools.buildNotebookLmPodcastPrompt(q.subject,examLabel)
+        : `請以繁體中文製作「${examLabel}・${q.subject}」雙人深度對談 Podcast。`;
+      try{
+        await copyTextToClipboard(promptText);
+        btn.textContent='✓ 已複製對談提示詞';
+        showExportFeedback('已複製 Podcast 雙人對談提示詞！可在 NotebookLM 右側「語音摘要 → 自訂」中直接貼上');
+        setTimeout(()=>{if($('#copyPodcastPrompt'))$('#copyPodcastPrompt').textContent='🎙 複製 Podcast 雙人對談提示詞'},2400);
+      }catch(_){
+        btn.textContent='複製失敗';
+        setTimeout(()=>{if($('#copyPodcastPrompt'))$('#copyPodcastPrompt').textContent='🎙 複製 Podcast 雙人對談提示詞'},2400);
+      }
     };
     if($('#copyNaturalAudio'))$('#copyNaturalAudio').onclick=async()=>{
       const btn=$('#copyNaturalAudio');
