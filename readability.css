@@ -188,3 +188,21 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .essay-remask-btn:hover{background:#3a3357;color:#ffffff}
   .essay-stage-mask{background:repeating-linear-gradient(135deg,#27223a,#27223a 10px,#211d31 10px,#211d31 20px);color:#dbd5f2}
 }
+
+/* Voice selector & naturalness tip — build 30 */
+.essay-voice-row{display:grid;gap:6px;padding-top:8px;border-top:1px dashed #d6d0ef}
+.essay-voice-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px;font-weight:750;color:#2f2857}
+.essay-voice-picker>span{flex:0 0 auto}
+.essay-voice-select{flex:1;min-width:210px;min-height:38px;padding:6px 10px;border:1px solid #c7c0eb;border-radius:10px;background:#ffffff;color:#262044;font:inherit;font-size:13px;font-weight:650}
+.essay-voice-select:focus-visible{outline:3px solid rgba(79,70,165,.42);outline-offset:2px}
+.essay-voice-tip{margin:0;font-size:12px;line-height:1.55;color:#5c557a}
+@media(max-width:600px){
+  .essay-voice-picker{flex-direction:column;align-items:stretch;gap:6px}
+  .essay-voice-select{width:100%;min-width:0}
+}
+@media(prefers-color-scheme:dark){
+  .essay-voice-row{border-top-color:#433c61}
+  .essay-voice-picker{color:#e8e4f6}
+  .essay-voice-select{background:#2d2842;border-color:#5b5282;color:#f3f0fc}
+  .essay-voice-tip{color:#c4bddb}
+}

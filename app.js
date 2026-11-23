@@ -1,11 +1,14 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SPEECH_VOICE_PREF_KEY = 'swq_essay_speech_voice';
+function loadPreferredVoiceName(){try{return localStorage.getItem(SPEECH_VOICE_PREF_KEY)||''}catch(_){return ''}}
+function savePreferredVoiceName(name){try{if(name)localStorage.setItem(SPEECH_VOICE_PREF_KEY,name);else localStorage.removeItem(SPEECH_VOICE_PREF_KEY)}catch(_){}}
 const state = {
   questions: [], view: 'library', stack: [], currentList: [], currentIndex: 0,
   favorites: new Set(), wrong: new Set(), answered: 0, correct: 0, attempts: [], reviews: [], mockExams: [], essayPractices: [], resume: null, plan: {weeklyGoal:120,startDate:null}, notes:{}, tags:{}, customTags:[], errataNotes:{}, filters:{},
   selected: null, submitted: false, examType: 'socialWorker', activeMockId: null, mockIndex: 0, essayStartedAt: null, essayInterval: null,
   essayBlindMode: false, essayRevealedStages: new Set(), essayLastQuestionId: null,
-  essaySpeech: { status: 'idle', rate: 1, continuous: false, activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null }
+  essaySpeech: { status: 'idle', rate: 1, continuous: false, voiceName: loadPreferredVoiceName(), activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null, pauseTimer: null }
 };
 const socialSubjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
 const publicSubjects = ['社會福利政策與法規','社會工作實務'];
@@ -126,21 +129,55 @@ const ESSAY_STAGES=(window.essayStudyTools?.ESSAY_STAGES)||[
   ['he','合','總結與具體建議展望']
 ];
 const SPEECH_RATES=(window.essayStudyTools?.SPEECH_RATES)||[1,1.25,1.5];
-let cachedZhTwVoice=null;
+let cachedChineseVoices=[];
 function isSpeechSupported(){
   return typeof window!=='undefined'&&'speechSynthesis'in window&&typeof window.SpeechSynthesisUtterance==='function';
 }
-function resolveZhTwVoice(){
-  if(!isSpeechSupported())return null;
+function refreshChineseVoices(){
+  if(!isSpeechSupported())return [];
   try{
     const voices=window.speechSynthesis.getVoices()||[];
-    if(voices.length)cachedZhTwVoice=window.essayStudyTools?.pickPreferredZhTwVoice(voices)||null;
-  }catch(_){cachedZhTwVoice=null}
-  return cachedZhTwVoice;
+    if(voices.length){
+      cachedChineseVoices=window.essayStudyTools?window.essayStudyTools.listChineseVoices(voices):voices;
+    }
+  }catch(_){cachedChineseVoices=[]}
+  return cachedChineseVoices;
+}
+function resolveActiveVoice(){
+  const voices=refreshChineseVoices();
+  if(!voices.length)return null;
+  if(window.essayStudyTools)return window.essayStudyTools.resolveSelectedVoice(voices,state.essaySpeech.voiceName);
+  return voices[0]||null;
+}
+function buildVoiceOptionsHtml(){
+  const voices=refreshChineseVoices();
+  const autoVoice=voices[0]||null;
+  const autoLabel=autoVoice&&window.essayStudyTools
+    ? `自動推薦：${window.essayStudyTools.formatVoiceOptionLabel(autoVoice)}`
+    : '自動推薦（優先高擬真 zh-TW 語音）';
+  const selected=state.essaySpeech.voiceName||'';
+  const options=[`<option value="" ${!selected?'selected':''}>${esc(autoLabel)}</option>`];
+  for(const v of voices){
+    const val=v.name||v.voiceURI||'';
+    const label=window.essayStudyTools?window.essayStudyTools.formatVoiceOptionLabel(v):`${v.name} [${v.lang}]`;
+    const isSel=Boolean(selected&&(selected===v.name||selected===v.voiceURI));
+    options.push(`<option value="${esc(val)}" ${isSel?'selected':''}>${esc(label)}</option>`);
+  }
+  return options.join('');
+}
+function populateEssayVoiceSelect(){
+  const select=$('#essayVoiceSelect');
+  if(!select)return;
+  select.innerHTML=buildVoiceOptionsHtml();
 }
 if(isSpeechSupported()){
-  resolveZhTwVoice();
-  try{window.speechSynthesis.addEventListener?.('voiceschanged',resolveZhTwVoice)}catch(_){}
+  refreshChineseVoices();
+  try{
+    window.speechSynthesis.addEventListener?.('voiceschanged',()=>{
+      refreshChineseVoices();
+      populateEssayVoiceSelect();
+    });
+  }catch(_){}
 }
 function syncEssaySpeechUI(scrollActive=false){
   const sp=state.essaySpeech;
@@ -187,9 +224,14 @@ function syncEssaySpeechUI(scrollActive=false){
     try{activeEl.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(_){}
   }
 }
-function stopEssaySpeech(note=''){
+function clearSpeechTimers(){
   const sp=state.essaySpeech;
   if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  if(sp.pauseTimer){clearTimeout(sp.pauseTimer);sp.pauseTimer=null}
+}
+function stopEssaySpeech(note=''){
+  const sp=state.essaySpeech;
+  clearSpeechTimers();
   sp.sessionId++;
   if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
   sp.status='idle';
@@ -241,15 +283,29 @@ function speakCurrentEssayChunk(q){
   sp.statusNote='';
   syncEssaySpeechUI(segmentChanged);
   const utter=new window.SpeechSynthesisUtterance(chunk.text);
-  utter.lang='zh-TW';
+  const voice=resolveActiveVoice();
+  utter.lang=voice?.lang||'zh-TW';
   utter.rate=sp.rate;
-  const voice=resolveZhTwVoice();
+  utter.pitch=window.essayStudyTools?window.essayStudyTools.recommendedVoicePitch(voice):0.98;
   if(voice)utter.voice=voice;
   const mySession=sp.sessionId;
   utter.onend=()=>{
     if(sp.sessionId!==mySession||sp.status!=='playing')return;
     sp.chunkIndex++;
-    speakCurrentEssayChunk(q);
+    if(sp.chunkIndex>=sp.chunks.length){
+      speakCurrentEssayChunk(q);
+      return;
+    }
+    const pauseMs=window.essayStudyTools?window.essayStudyTools.effectivePauseMs(chunk.pauseAfterMs,sp.rate):200;
+    if(pauseMs>0){
+      sp.pauseTimer=setTimeout(()=>{
+        if(sp.sessionId!==mySession||sp.status!=='playing')return;
+        sp.pauseTimer=null;
+        speakCurrentEssayChunk(q);
+      },pauseMs);
+    }else{
+      speakCurrentEssayChunk(q);
+    }
   };
   utter.onerror=event=>{
     if(sp.sessionId!==mySession)return;
@@ -265,7 +321,7 @@ function startEssaySpeech(q){
   const queue=window.essayStudyTools?window.essayStudyTools.buildEssaySpeechQueue(q):[];
   if(!queue.length){stopEssaySpeech('本題尚無可朗讀文字');return}
   const sp=state.essaySpeech;
-  if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  clearSpeechTimers();
   sp.sessionId++;
   try{window.speechSynthesis.cancel()}catch(_){}
   sp.questionId=q.id;
@@ -280,7 +336,7 @@ function startEssaySpeech(q){
 function pauseEssaySpeech(){
   const sp=state.essaySpeech;
   if(sp.status!=='playing')return;
-  if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  clearSpeechTimers();
   sp.sessionId++;
   if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
   sp.status='paused';
@@ -290,6 +346,7 @@ function pauseEssaySpeech(){
 function resumeEssaySpeech(q){
   const sp=state.essaySpeech;
   if(sp.status!=='paused'||sp.questionId!==q.id||!sp.chunks.length){startEssaySpeech(q);return}
+  clearSpeechTimers();
   sp.sessionId++;
   sp.status='playing';
   sp.statusNote='';
@@ -299,6 +356,20 @@ function setEssaySpeechRate(rate,q){
   const sp=state.essaySpeech;
   sp.rate=window.essayStudyTools?window.essayStudyTools.normaliseSpeechRate(rate):Number(rate)||1;
   if(sp.status==='playing'&&sp.questionId===q.id&&sp.chunks.length){
+    clearSpeechTimers();
+    sp.sessionId++;
+    if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+    speakCurrentEssayChunk(q);
+  }else{
+    syncEssaySpeechUI(false);
+  }
+}
+function setEssaySpeechVoice(voiceName,q){
+  const sp=state.essaySpeech;
+  sp.voiceName=voiceName||'';
+  savePreferredVoiceName(sp.voiceName);
+  if(sp.status==='playing'&&sp.questionId===q.id&&sp.chunks.length){
+    clearSpeechTimers();
     sp.sessionId++;
     if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
     speakCurrentEssayChunk(q);
@@ -396,6 +467,13 @@ function renderEssaySprintBarHtml(q){
         <button type="button" class="essay-sprint-btn" id="essaySpeechPause" ${sp.status==='idle'?'disabled':''}>${sp.status==='paused'?'▶ 繼續':'⏸ 暫停'}</button>
         <button type="button" class="essay-sprint-btn" id="essaySpeechStop" ${sp.status==='idle'?'disabled':''}>⏹ 停止</button>
         <div class="speech-rate-group" role="group" aria-label="朗讀語速">${SPEECH_RATES.map(r=>`<button type="button" class="speech-rate-btn ${sp.rate===r?'is-active':''}" data-speech-rate="${r}" aria-pressed="${sp.rate===r}">${r===1?'1.0x':`${r}x`}</button>`).join('')}</div>
+      </div>
+      <div class="essay-voice-row">
+        <label class="essay-voice-picker" for="essayVoiceSelect">
+          <span>🎙 朗讀聲音</span>
+          <select id="essayVoiceSelect" class="essay-voice-select" aria-label="選擇中文朗讀聲音">${buildVoiceOptionsHtml()}</select>
+        </label>
+        <p class="essay-voice-tip">💡 iOS/Mac 可於系統「輔助使用＞語音內容」下載進階版聲音，或使用 Edge 享高擬真語音</p>
       </div>
       <div class="essay-commute-row">
         <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🎧 通勤連播模式（播完自動接下一題）</span></label>
@@ -504,6 +582,10 @@ function renderQuestion(){
     };
     if($('#essaySpeechStop'))$('#essaySpeechStop').onclick=()=>stopEssaySpeech();
     document.querySelectorAll('[data-speech-rate]').forEach(btn=>btn.onclick=()=>setEssaySpeechRate(Number(btn.dataset.speechRate),q));
+    if($('#essayVoiceSelect')){
+      populateEssayVoiceSelect();
+      $('#essayVoiceSelect').onchange=e=>setEssaySpeechVoice(e.target.value,q);
+    }
     if($('#essayCommuteToggle'))$('#essayCommuteToggle').onchange=e=>{state.essaySpeech.continuous=Boolean(e.target.checked)};
     if($('#toggleBlindMode'))$('#toggleBlindMode').onclick=()=>{
       state.essayBlindMode=!state.essayBlindMode;
