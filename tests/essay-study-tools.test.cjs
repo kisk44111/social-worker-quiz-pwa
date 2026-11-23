@@ -164,3 +164,45 @@ test('toggleRevealedStage and normaliseSpeechRate handle blind recall and speed 
   assert.equal(tools.normaliseSpeechRate(2.5), 1);
   assert.equal(tools.normaliseSpeechRate('invalid'), 1);
 });
+
+test('formatEssayForNaturalAudio produces conversational script without raw brackets or markdown while keeping exam terms', () => {
+  const script = tools.formatEssayForNaturalAudio({
+    ...sampleEssay,
+    year: 2026,
+    session: 1,
+    subject: '社會工作'
+  });
+  assert.ok(script.includes('2026年第1次社會工作申論題考前導讀'));
+  assert.ok(script.includes('這題在考的核心概念是'));
+  assert.ok(script.includes('在理論與法規面向上'));
+  assert.ok(script.includes('回到台灣第一線社工實務現場來看'));
+  assert.ok(script.includes('最後在結論收尾時'));
+  assert.ok(script.includes('考前快速複習這題一定要帶到的核心理論與法規關鍵字'));
+  assert.ok(script.includes('兒童及少年福利與權益保障法'));
+  assert.ok(script.includes('優勢觀點'));
+  assert.ok(script.includes('強化社會安全網第二期計畫'));
+  assert.ok(!/[《》【】「」『』()（）*#]/.test(script), 'raw brackets and markdown symbols should be removed');
+});
+
+test('buildSubjectNaturalAudioExport and buildNaturalAudioFilename package multiple essays cleanly for NotebookLM', () => {
+  const list = [
+    { ...sampleEssay, id: 'e1', year: 2026, session: 1, subject: '社會工作' },
+    { id: 'm1', type: 'multipleChoice', subject: '社會工作', prompt: '忽略選擇題' },
+    {
+      id: 'e2',
+      type: 'essay',
+      year: 2026,
+      session: 2,
+      subject: '社會工作',
+      prompt: '試述任務中心取向。',
+      referenceAnswer: '強調短期與具體任務。'
+    }
+  ];
+  const exported = tools.buildSubjectNaturalAudioExport(list, '社會工作', '社工師考試');
+  assert.ok(exported.includes('社工師考試｜社會工作 申論題自然口語導讀講稿（共 2 題）'));
+  assert.ok(exported.includes('NotebookLM'));
+  assert.ok(exported.includes('第 1 題講稿'));
+  assert.ok(exported.includes('第 2 題講稿'));
+  assert.ok(!exported.includes('忽略選擇題'));
+  assert.equal(tools.buildNaturalAudioFilename('社會工作', 24), '社工師口語講稿-社會工作-24題.txt');
+});

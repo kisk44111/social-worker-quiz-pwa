@@ -456,11 +456,28 @@ function bindEssayModelEvents(q){
     };
   });
 }
+function getSubjectExportEssays(q){
+  const targetExam=examOf(q);
+  const inList=state.currentList.filter(item=>item&&item.type==='essay'&&examOf(item)===targetExam&&item.subject===q.subject);
+  if(inList.length>1)return inList;
+  const allInSubject=state.questions.filter(item=>item&&item.type==='essay'&&examOf(item)===targetExam&&item.subject===q.subject);
+  return allInSubject.length?allInSubject:[q];
+}
+async function copyTextToClipboard(text){
+  if(navigator.clipboard?.writeText){
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+}
 function renderEssaySprintBarHtml(q){
   const speechOk=isSpeechSupported();
   const sp=state.essaySpeech;
   const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{position:1,total:1,prevIndex:-1,nextIndex:-1};
   const hasModel=Boolean(q.essayGuide?.modelAnswer);
+  const exportEssays=getSubjectExportEssays(q);
   const speechControls=speechOk
     ? `<div class="essay-speech-row">
         <button type="button" class="essay-sprint-btn essay-speech-play ${sp.status==='playing'?'is-active':''}" id="essaySpeechPlay" aria-pressed="${sp.status==='playing'}">${sp.status==='playing'?'🔊 朗讀中':(sp.status==='paused'?'▶ 繼續朗讀':'🔊 朗讀本題')}</button>
@@ -473,13 +490,21 @@ function renderEssaySprintBarHtml(q){
           <span>🎙 朗讀聲音</span>
           <select id="essayVoiceSelect" class="essay-voice-select" aria-label="選擇中文朗讀聲音">${buildVoiceOptionsHtml()}</select>
         </label>
-        <p class="essay-voice-tip">💡 iOS/Mac 可於系統「輔助使用＞語音內容」下載進階版聲音，或使用 Edge 享高擬真語音</p>
+        <p class="essay-voice-tip">💡 若要直接在網頁內聽真人級語音，建議使用 <strong>Microsoft Edge 瀏覽器</strong>並選取「★ HsiaoChen Online (Natural)」；iOS/Mac 亦可於系統「輔助使用＞語音內容」下載進階版聲音。</p>
       </div>
       <div class="essay-commute-row">
         <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🎧 通勤連播模式（播完自動接下一題）</span></label>
         <span id="essaySpeechStatus" class="speech-status" aria-live="polite">依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單</span>
       </div>`
     : '';
+  const exportControls=`<div class="essay-export-row">
+    <div class="essay-export-head"><span>🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）</span></div>
+    <div class="essay-export-actions">
+      <button type="button" class="essay-sprint-btn essay-export-btn" id="copyNaturalAudio">📋 複製單題口語講稿</button>
+      <button type="button" class="essay-sprint-btn essay-export-btn" id="exportSubjectAudioTxt">📦 匯出本考科講稿（${exportEssays.length} 題 .txt）</button>
+    </div>
+    <p id="essayExportFeedback" class="essay-export-feedback hidden" role="status" aria-live="polite"></p>
+  </div>`;
   const navControls=pos.total>1
     ? `<div class="essay-nav-inline">
         <button type="button" class="essay-action-btn" id="essayPrevBtn" ${pos.prevIndex<0?'disabled':''}>‹ 上一題</button>
@@ -496,6 +521,7 @@ function renderEssaySprintBarHtml(q){
       </div>
     </div>
     ${speechControls}
+    ${exportControls}
   </section>`;
 }
 function renderEssayAnswersHtml(q){
@@ -609,6 +635,44 @@ function renderQuestion(){
     const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{prevIndex:-1,nextIndex:-1};
     if($('#essayPrevBtn'))$('#essayPrevBtn').onclick=()=>{if(pos.prevIndex>=0){stopEssaySpeech();state.currentIndex=pos.prevIndex;saveResume();renderQuestion();scrollTo(0,0)}};
     if($('#essayNextBtn'))$('#essayNextBtn').onclick=()=>{if(pos.nextIndex>=0){stopEssaySpeech();state.currentIndex=pos.nextIndex;saveResume();renderQuestion();scrollTo(0,0)}};
+    const showExportFeedback=msg=>{
+      const fb=$('#essayExportFeedback');
+      if(!fb)return;
+      fb.textContent=msg;
+      fb.classList.remove('hidden');
+    };
+    if($('#copyNaturalAudio'))$('#copyNaturalAudio').onclick=async()=>{
+      const btn=$('#copyNaturalAudio');
+      const text=window.essayStudyTools?window.essayStudyTools.formatEssayForNaturalAudio(q):buildEssayCopyText(q);
+      if(!text)return;
+      try{
+        await copyTextToClipboard(text);
+        btn.textContent='✓ 已複製口語講稿';
+        showExportFeedback('已複製口語講稿！可直接貼入 Gemini App 或 NotebookLM 生成真人語音');
+        setTimeout(()=>{if($('#copyNaturalAudio'))$('#copyNaturalAudio').textContent='📋 複製單題口語講稿'},2400);
+      }catch(_){
+        btn.textContent='複製失敗';
+        showExportFeedback('無法存取剪貼簿，請改用「匯出本考科講稿（.txt）」下載。');
+        setTimeout(()=>{if($('#copyNaturalAudio'))$('#copyNaturalAudio').textContent='📋 複製單題口語講稿'},2400);
+      }
+    };
+    if($('#exportSubjectAudioTxt'))$('#exportSubjectAudioTxt').onclick=()=>{
+      const exportEssays=getSubjectExportEssays(q);
+      const examLabel=examConfigs[examOf(q)]?.label||'社工師考試';
+      const content=window.essayStudyTools
+        ? window.essayStudyTools.buildSubjectNaturalAudioExport(exportEssays,q.subject,examLabel)
+        : exportEssays.map(buildEssayCopyText).join('\n\n---\n\n');
+      const filename=window.essayStudyTools
+        ? window.essayStudyTools.buildNaturalAudioFilename(q.subject,exportEssays.length)
+        : `社工師口語講稿-${q.subject}.txt`;
+      const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+      const link=document.createElement('a');
+      link.href=URL.createObjectURL(blob);
+      link.download=filename;
+      link.click();
+      setTimeout(()=>URL.revokeObjectURL(link.href),0);
+      showExportFeedback(`已下載「${filename}」（共 ${exportEssays.length} 題）！可直接上傳至 Google NotebookLM 生成雙人深度對談 Podcast`);
+    };
     if($('#toggleEssayModel'))$('#toggleEssayModel').onclick=()=>{
       const body=$('#essayModelBody'),btn=$('#toggleEssayModel');
       const collapsed=body.classList.toggle('collapsed');
@@ -619,8 +683,7 @@ function renderQuestion(){
       const text=buildEssayCopyText(q),btn=$('#copyEssayModel');
       if(!text)return;
       try{
-        if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);
-        else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+        await copyTextToClipboard(text);
         btn.textContent='已複製 ✓';setTimeout(()=>{if($('#copyEssayModel'))$('#copyEssayModel').textContent='複製擬答'},1800);
       }catch(_){btn.textContent='複製失敗';setTimeout(()=>{if($('#copyEssayModel'))$('#copyEssayModel').textContent='複製擬答'},1800);}
     };

@@ -206,3 +206,23 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .essay-voice-select{background:#2d2842;border-color:#5b5282;color:#f3f0fc}
   .essay-voice-tip{color:#c4bddb}
 }
+
+/* Natural audio script export bar (NotebookLM / Gemini) — build 31 */
+.essay-export-row{display:grid;gap:8px;padding-top:10px;border-top:1px dashed #d6d0ef}
+.essay-export-head{font-size:13px;font-weight:800;color:#176d60}
+.essay-export-actions{display:flex;gap:8px;flex-wrap:wrap}
+.essay-export-btn{border-color:#9fd5c9;background:#f0faf7;color:#115c50}
+.essay-export-btn:hover:not(:disabled){background:#def4ee;border-color:#59b5a3}
+.essay-export-feedback{margin:0;padding:8px 12px;border-radius:10px;background:#e4f6f1;border:1px solid #a7dcd0;color:#0f564a;font-size:12.5px;font-weight:700;line-height:1.55}
+.essay-export-feedback.hidden{display:none}
+@media(max-width:600px){
+  .essay-export-actions{flex-direction:column}
+  .essay-export-btn{width:100%;text-align:center}
+}
+@media(prefers-color-scheme:dark){
+  .essay-export-row{border-top-color:#433c61}
+  .essay-export-head{color:#7ee0cd}
+  .essay-export-btn{background:#193b36;border-color:#34786c;color:#c9f5eb}
+  .essay-export-btn:hover:not(:disabled){background:#204d46;border-color:#56b2a1}
+  .essay-export-feedback{background:#183a34;border-color:#387d70;color:#bef3e7}
+}

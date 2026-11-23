@@ -264,6 +264,116 @@
     return queue;
   }
 
+  function toConversationalParagraph(text) {
+    const cleaned = cleanSpeechText(text);
+    if (!cleaned) return '';
+    const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+    const spokenLines = lines.map((line, idx) => {
+      let s = line
+        .replace(/^第一點[，,、：:]?\s*/, idx === 0 ? '首先，' : '第一點，')
+        .replace(/^第二點[，,、：:]?\s*/, '接著第二點，')
+        .replace(/^第三點[，,、：:]?\s*/, '第三點，')
+        .replace(/^第四點[，,、：:]?\s*/, '再來第四點，')
+        .replace(/^第五點[，,、：:]?\s*/, '第五點，')
+        .replace(/^第六點[，,、：:]?\s*/, '第六點，')
+        .replace(/[：:]/g, '，')
+        .replace(/[；;]/g, '，')
+        .replace(/[()（）\[\]【】《》「」『』*#•▪]/g, '')
+        .replace(/[，,]{2,}/g, '，')
+        .replace(/([。！？])[，,]+/g, '$1')
+        .replace(/[，,]+([。！？])/g, '$1')
+        .trim();
+      if (s && !/[。！？]$/.test(s)) s += '。';
+      return s;
+    });
+    return spokenLines.join(' ');
+  }
+
+  function formatEssayForNaturalAudio(question) {
+    if (!question) return '';
+    const blocks = [];
+    const metaBits = [];
+    if (question.year) metaBits.push(`${question.year}年`);
+    if (question.session) metaBits.push(`第${question.session}次`);
+    if (question.subject) metaBits.push(cleanSpeechText(question.subject));
+    const intro = metaBits.length ? `${metaBits.join('')}申論題考前導讀。` : '申論題考前導讀。';
+
+    const prompt = toConversationalParagraph(question.prompt);
+    blocks.push(`${intro}${prompt ? `先來看一下這題的題目，${prompt}` : ''}`);
+
+    const model = question.essayGuide && question.essayGuide.modelAnswer;
+    if (model) {
+      const qi = model.qi || {};
+      const cheng = model.cheng || {};
+      const zhuan = model.zhuan || {};
+      const he = model.he || {};
+
+      const qiBody = toConversationalParagraph(qi.content);
+      if (qiBody) {
+        const title = cleanSpeechText(qi.title || ESSAY_STAGES[0][2]);
+        blocks.push(`這題在考的核心概念是${title}。${qiBody}`);
+      }
+
+      const chengBody = toConversationalParagraph(cheng.content);
+      if (chengBody) {
+        const title = cleanSpeechText(cheng.title || ESSAY_STAGES[1][2]);
+        blocks.push(`在理論與法規面向上，針對${title}，我們可以從以下幾個重點切入。${chengBody}`);
+      }
+
+      const zhuanBody = toConversationalParagraph(zhuan.content);
+      if (zhuanBody) {
+        const title = cleanSpeechText(zhuan.title || ESSAY_STAGES[2][2]);
+        blocks.push(`回到台灣第一線社工實務現場來看，關於${title}，${zhuanBody}`);
+      }
+
+      const heBody = toConversationalParagraph(he.content);
+      if (heBody) {
+        const title = cleanSpeechText(he.title || ESSAY_STAGES[3][2]);
+        blocks.push(`最後在結論收尾時，針對${title}，建議提出以下總結。${heBody}`);
+      }
+    } else {
+      const legacyBody = toConversationalParagraph(question.referenceAnswer || question.explanation || '');
+      if (legacyBody) {
+        blocks.push(`這題的重點作答方向可以這樣切入。${legacyBody}`);
+      }
+    }
+
+    const theories = question.essayGuide && question.essayGuide.analysis && Array.isArray(question.essayGuide.analysis.theoriesAndLaws)
+      ? question.essayGuide.analysis.theoriesAndLaws
+          .map(item => cleanSpeechText(item).replace(/[：:；;()（）\[\]【】《》「」『』]/g, '，').replace(/[，,]{2,}/g, '，').replace(/^，|，$/g, '').trim())
+          .filter(Boolean)
+      : [];
+    if (theories.length) {
+      blocks.push(`考前快速複習這題一定要帶到的核心理論與法規關鍵字，包括：${theories.join('、')}。`);
+    }
+
+    return blocks.filter(Boolean).join('\n\n');
+  }
+
+  function buildSubjectNaturalAudioExport(questions, subjectName, examLabel) {
+    const list = Array.isArray(questions) ? questions.filter(q => q && q.type === 'essay') : [];
+    const subject = cleanSpeechText(subjectName || (list[0] && list[0].subject) || '申論題');
+    const exam = cleanSpeechText(examLabel || '社工師考試');
+    const header = [
+      `${exam}｜${subject} 申論題自然口語導讀講稿（共 ${list.length} 題）`,
+      '使用建議：本檔專為 Google NotebookLM 雙人深度對談 Podcast（Audio Overview）與 Gemini 語音朗讀整理，已去除干擾發音之符號並保留所有台灣社工國考專有名詞、理論與法規關鍵字。',
+      '非考選部官方標準答案或評分依據；法規與實務請以考試當年度有效規定為準。'
+    ].join('\n');
+
+    const body = list.map((q, idx) => {
+      const script = formatEssayForNaturalAudio(q);
+      return `第 ${idx + 1} 題講稿\n${script}`;
+    }).join('\n\n────────────────────\n\n');
+
+    return body ? `${header}\n\n====================\n\n${body}\n` : `${header}\n`;
+  }
+
+  function buildNaturalAudioFilename(subjectName, count) {
+    const safeSubject = String(subjectName || '申論題').replace(/[\\/:*?"<>|\s]+/g, '');
+    const suffix = Number.isInteger(count) && count > 0 ? `-${count}題` : '';
+    return `社工師口語講稿-${safeSubject}${suffix}.txt`;
+  }
+
   function effectivePauseMs(basePauseMs, rate) {
     const base = Number(basePauseMs);
     if (!Number.isFinite(base) || base <= 0) return 0;
@@ -410,6 +520,9 @@
     splitTextIntoChunks,
     buildEssaySpeechSegments,
     buildEssaySpeechQueue,
+    formatEssayForNaturalAudio,
+    buildSubjectNaturalAudioExport,
+    buildNaturalAudioFilename,
     effectivePauseMs,
     isNeuralVoice,
     scoreVoice,
