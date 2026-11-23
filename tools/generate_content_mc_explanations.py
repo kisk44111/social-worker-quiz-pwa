@@ -1,23 +1,47 @@
 #!/usr/bin/env python3
-"""Generate content-grounded MC explanations with GitHub Models.
+"""Offline maintenance script to generate content-grounded MC explanations via OpenRouter.
 
-The GitHub credential is read at runtime through ``gh auth token`` and is never
-written to disk. Completed batches are checkpointed so the job can resume.
+Security and safety safeguards:
+- Offline maintenance tool only; never used by the browser runtime.
+- Credentials are never stored in the repo or written to disk.
+- Prefers the ``OPENROUTER_API_KEY`` environment variable; macOS Keychain
+  (service ``codex-openrouter-api-key``) is only read when ``--use-keychain``
+  is explicitly passed.
+- ``--dry-run`` (or zero pending items without ``--apply``) exits without
+  reading Keychain or making any external API requests.
+- Remote API requests and ``--apply`` writes require ``--confirm-remote-api``.
+- ``--apply`` validates the full question bank with ``validate_questions`` and
+  replaces ``questions.json`` atomically via a temporary file in the same
+  directory.
 """
+
+from __future__ import annotations
 
 import argparse
 import concurrent.futures
+from datetime import datetime, timezone
 import json
+import os
+from pathlib import Path
 import subprocess
+import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
+
+try:
+    from tools.validate_questions import validate_questions
+except ImportError:
+    from validate_questions import validate_questions
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "questions.json"
 CHECKPOINT = ROOT / ".mc-explanation-checkpoint.json"
+DEFAULT_ERROR_LOG_DIR = Path(tempfile.gettempdir()) / "social-worker-quiz-pwa-logs"
+KEYCHAIN_SERVICE = "codex-openrouter-api-key"
+API_KEY_ENV = "OPENROUTER_API_KEY"
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 MODEL_CONFIGS = (
     ("openai/gpt-4.1-mini", 4, 12000),
@@ -38,12 +62,84 @@ SYSTEM = """你是臺灣社工師國家考試的資深命題解析教師。請�
 """
 
 
-def token() -> str:
+def read_keychain_token() -> str:
+    account = subprocess.check_output(["id", "-un"], text=True).strip()
     return subprocess.check_output(
-        ["security", "find-generic-password", "-a", subprocess.check_output(["id", "-un"], text=True).strip(),
-         "-s", "codex-openrouter-api-key", "-w"],
+        ["security", "find-generic-password", "-a", account, "-s", KEYCHAIN_SERVICE, "-w"],
         text=True,
     ).strip()
+
+
+def resolve_api_token(*, use_keychain: bool = False) -> str:
+    env_token = os.environ.get(API_KEY_ENV, "").strip()
+    if env_token:
+        return env_token
+    if use_keychain:
+        keychain_token = read_keychain_token()
+        if keychain_token:
+            return keychain_token
+        raise SystemExit(f"macOS Keychain 項目 {KEYCHAIN_SERVICE!r} 為空，無法取得 OpenRouter API 金鑰。")
+    raise SystemExit(
+        f"未設定環境變數 {API_KEY_ENV}。請設定 {API_KEY_ENV}，或明確加上 --use-keychain "
+        f"以從 macOS Keychain（{KEYCHAIN_SERVICE}）讀取金鑰。"
+    )
+
+
+def atomic_write_text(target: Path, content: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, target)
+    except Exception:
+        if tmp_path is not None and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
+
+
+def write_invalid_response_log(
+    response: dict,
+    invalid_ids: list[str],
+    log_dir: Path = DEFAULT_ERROR_LOG_DIR,
+) -> Path:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(log_dir, 0o700)
+    except OSError:
+        pass
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    payload = {
+        "loggedAt": datetime.now(timezone.utc).isoformat(),
+        "invalidQuestionIds": invalid_ids,
+        "response": response,
+    }
+    fd, raw_path = tempfile.mkstemp(
+        dir=log_dir,
+        prefix=f"mc-invalid-response-{timestamp}-",
+        suffix=".json",
+    )
+    log_path = Path(raw_path)
+    try:
+        os.chmod(log_path, 0o600)
+    except OSError:
+        pass
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return log_path
 
 
 def request_model(batch: list[dict], auth_token: str, model: str, max_tokens: int) -> dict:
@@ -147,95 +243,184 @@ def format_explanation(item: dict, question: dict) -> str:
 {item['review'].strip()}"""
 
 
-def load_checkpoint() -> dict:
-    if CHECKPOINT.exists():
-        return json.loads(CHECKPOINT.read_text(encoding="utf-8"))
+def load_checkpoint(checkpoint_path: Path = CHECKPOINT) -> dict:
+    if checkpoint_path.exists():
+        return json.loads(checkpoint_path.read_text(encoding="utf-8"))
     return {}
 
 
-def save_checkpoint(results: dict) -> None:
-    CHECKPOINT.write_text(json.dumps(results, ensure_ascii=False), encoding="utf-8")
+def save_checkpoint(results: dict, checkpoint_path: Path = CHECKPOINT) -> None:
+    atomic_write_text(checkpoint_path, json.dumps(results, ensure_ascii=False))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--batch-size", type=int, default=20)
-    parser.add_argument("--workers", type=int, default=3)
-    parser.add_argument("--limit", type=int)
-    parser.add_argument("--apply", action="store_true")
-    args = parser.parse_args()
-
-    questions = json.loads(DATA.read_text(encoding="utf-8"))
-    multiple = [q for q in questions if q.get("type") == "multipleChoice"]
-    if args.limit:
-        multiple = multiple[: args.limit]
-    results = load_checkpoint()
-    pending = [q for q in multiple if q["id"] not in results]
-    auth_token = token()
-    print(f"Target {len(multiple)}; cached {len(multiple)-len(pending)}; pending {len(pending)}", flush=True)
-
-    batches = []
+def build_batches(pending: list[dict], batch_size: int) -> list[tuple[list[dict], str, int]]:
+    batches: list[tuple[list[dict], str, int]] = []
     offset = 0
     while offset < len(pending):
         for model, configured_size, max_tokens in MODEL_CONFIGS:
             if offset >= len(pending):
                 break
-            size = min(args.batch_size, configured_size) if args.batch_size else configured_size
+            size = min(batch_size, configured_size) if batch_size else configured_size
             batch = pending[offset : offset + size]
             batches.append((batch, model, max_tokens))
             offset += len(batch)
+    return batches
 
-    def generate_batch(batch: list[dict], model: str, max_tokens: int) -> dict:
-        for attempt in range(1, 7):
-            try:
-                response = request_model(batch, auth_token, model, max_tokens)
-                response_items = response.get("questions", [])
-                if not isinstance(response_items, list) or any(not isinstance(item, dict) for item in response_items):
-                    raise ValueError("questions must be an array of objects")
-                returned = {item.get("id"): item for item in response_items}
-                for q in batch:
-                    if q["id"] in returned:
-                        returned[q["id"]] = normalize(returned[q["id"]], q)
-                invalid = [q["id"] for q in batch if q["id"] not in returned or not valid(returned[q["id"]], q)]
-                if invalid:
-                    Path("/tmp/mc-invalid-response.json").write_text(json.dumps(response, ensure_ascii=False, indent=2), encoding="utf-8")
-                    raise ValueError(f"invalid results: {invalid}")
-                return {q["id"]: returned[q["id"]] for q in batch}
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
-                if attempt == 6:
-                    if len(batch) > 1:
-                        print(f"Split stubborn {len(batch)}-question batch into single questions", flush=True)
-                        split_results = {}
-                        for question in batch:
-                            split_results.update(generate_batch([question], model, max_tokens))
-                        return split_results
-                    raise
-                wait = min(75, attempt * 15)
-                detail = getattr(exc, "code", f"{type(exc).__name__}: {exc}")
-                print(f"Retry {model} batch after {detail}; waiting {wait}s", flush=True)
-                time.sleep(wait)
 
-    completed_now = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = [executor.submit(generate_batch, batch, model, max_tokens) for batch, model, max_tokens in batches]
-        for future in concurrent.futures.as_completed(futures):
-            batch_results = future.result()
-            results.update(batch_results)
-            save_checkpoint(results)
-            completed_now += len(batch_results)
-            print(f"Completed {completed_now}/{len(pending)} (total cached {len(results)})", flush=True)
+def apply_explanations(
+    questions: list[dict],
+    multiple: list[dict],
+    results: dict,
+    data_path: Path = DATA,
+) -> int:
+    missing = [q["id"] for q in multiple if q["id"] not in results]
+    if missing:
+        raise SystemExit(f"Cannot apply; {len(missing)} target questions missing")
+    by_id = {q["id"]: q for q in questions}
+    updated_count = 0
+    for qid, item in results.items():
+        if qid in by_id and by_id[qid].get("type") == "multipleChoice":
+            by_id[qid]["explanation"] = format_explanation(item, by_id[qid])
+            updated_count += 1
+    errors = validate_questions(questions)
+    if errors:
+        preview = "\n".join(f"- {error}" for error in errors[:10])
+        raise SystemExit(
+            f"題庫結構驗證失敗（共 {len(errors)} 項），已中止寫入 {data_path}：\n{preview}"
+        )
+    atomic_write_text(data_path, json.dumps(questions, ensure_ascii=False, separators=(",", ":")))
+    return updated_count
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Offline maintenance script to generate content-grounded MC explanations "
+            "using the OpenRouter API. Safe by default: use --dry-run to preview, or "
+            "pass --confirm-remote-api to authorize external API calls / --apply writes."
+        )
+    )
+    parser.add_argument("--batch-size", type=int, default=20, help="Max questions per batch (clamped by model config).")
+    parser.add_argument("--workers", type=int, default=3, help="Concurrent worker threads for OpenRouter requests.")
+    parser.add_argument("--limit", type=int, help="Limit processing to the first N multiple-choice questions.")
+    parser.add_argument("--dry-run", action="store_true", help="Preview target/cached/pending counts without reading Keychain, calling APIs, or writing files.")
+    parser.add_argument("--apply", action="store_true", help="Validate and atomically write generated explanations back into questions.json.")
+    parser.add_argument(
+        "--confirm-remote-api",
+        action="store_true",
+        help="Explicitly authorize paid OpenRouter API requests and/or --apply writes to questions.json.",
+    )
+    parser.add_argument(
+        "--use-keychain",
+        action="store_true",
+        help=f"Fallback to macOS Keychain service {KEYCHAIN_SERVICE!r} if {API_KEY_ENV} is not set.",
+    )
+    parser.add_argument(
+        "--error-log-dir",
+        type=Path,
+        default=DEFAULT_ERROR_LOG_DIR,
+        help=f"Directory for timestamped invalid-response logs (default: {DEFAULT_ERROR_LOG_DIR}).",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    questions = json.loads(DATA.read_text(encoding="utf-8"))
+    multiple = [q for q in questions if q.get("type") == "multipleChoice"]
+    if args.limit is not None:
+        if args.limit < 0:
+            raise SystemExit("--limit must be a non-negative integer")
+        multiple = multiple[: args.limit]
+
+    results = load_checkpoint()
+    pending = [q for q in multiple if q["id"] not in results]
+    batches = build_batches(pending, args.batch_size)
+    print(f"Target {len(multiple)}; cached {len(multiple) - len(pending)}; pending {len(pending)}", flush=True)
+
+    if args.dry_run:
+        models = ", ".join(model for model, _, _ in MODEL_CONFIGS)
+        auth_source = (
+            f"env:{API_KEY_ENV}"
+            if os.environ.get(API_KEY_ENV, "").strip()
+            else (f"keychain:{KEYCHAIN_SERVICE}" if args.use_keychain else f"unconfigured (set {API_KEY_ENV} or pass --use-keychain)")
+        )
+        print(
+            f"[DRY-RUN] Planned {len(batches)} batch(es) via {ENDPOINT} (models: {models}); "
+            f"apply={args.apply}; auth_source={auth_source}. "
+            "No Keychain access, no remote API requests, and no files were modified.",
+            flush=True,
+        )
+        return 0
+
+    if not pending and not args.apply:
+        print("No pending questions and --apply not set; exiting without credential access or API requests.", flush=True)
+        return 0
+
+    if not args.confirm_remote_api:
+        action_desc = []
+        if pending:
+            action_desc.append(f"向 OpenRouter 發送 {len(batches)} 批付費 API 請求（{len(pending)} 題）")
+        if args.apply:
+            action_desc.append(f"寫回 {DATA.name}")
+        raise SystemExit(
+            f"已中止：本次執行將{'並'.join(action_desc)}。"
+            "請確認額度與範圍後加上 --confirm-remote-api，或先使用 --dry-run 預覽。"
+        )
+
+    if pending:
+        auth_token = resolve_api_token(use_keychain=args.use_keychain)
+
+        def generate_batch(batch: list[dict], model: str, max_tokens: int) -> dict:
+            for attempt in range(1, 7):
+                try:
+                    response = request_model(batch, auth_token, model, max_tokens)
+                    response_items = response.get("questions", [])
+                    if not isinstance(response_items, list) or any(not isinstance(item, dict) for item in response_items):
+                        raise ValueError("questions must be an array of objects")
+                    returned = {item.get("id"): item for item in response_items}
+                    for q in batch:
+                        if q["id"] in returned:
+                            returned[q["id"]] = normalize(returned[q["id"]], q)
+                    invalid = [q["id"] for q in batch if q["id"] not in returned or not valid(returned[q["id"]], q)]
+                    if invalid:
+                        log_path = write_invalid_response_log(response, invalid, log_dir=args.error_log_dir)
+                        print(f"Saved invalid API response log to {log_path}", file=sys.stderr, flush=True)
+                        raise ValueError(f"invalid results: {invalid}")
+                    return {q["id"]: returned[q["id"]] for q in batch}
+                except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+                    if attempt == 6:
+                        if len(batch) > 1:
+                            print(f"Split stubborn {len(batch)}-question batch into single questions", flush=True)
+                            split_results = {}
+                            for question in batch:
+                                split_results.update(generate_batch([question], model, max_tokens))
+                            return split_results
+                        raise
+                    wait = min(75, attempt * 15)
+                    detail = getattr(exc, "code", f"{type(exc).__name__}: {exc}")
+                    print(f"Retry {model} batch after {detail}; waiting {wait}s", flush=True)
+                    time.sleep(wait)
+            raise RuntimeError("Unreachable retry loop end")
+
+        completed_now = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+            futures = [executor.submit(generate_batch, batch, model, max_tokens) for batch, model, max_tokens in batches]
+            for future in concurrent.futures.as_completed(futures):
+                batch_results = future.result()
+                results.update(batch_results)
+                save_checkpoint(results)
+                completed_now += len(batch_results)
+                print(f"Completed {completed_now}/{len(pending)} (total cached {len(results)})", flush=True)
 
     if args.apply:
-        missing = [q["id"] for q in multiple if q["id"] not in results]
-        if missing:
-            raise SystemExit(f"Cannot apply; {len(missing)} target questions missing")
-        by_id = {q["id"]: q for q in questions}
-        for qid, item in results.items():
-            if qid in by_id and by_id[qid].get("type") == "multipleChoice":
-                by_id[qid]["explanation"] = format_explanation(item, by_id[qid])
-        DATA.write_text(json.dumps(questions, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        print(f"Applied {len(results)} content-grounded explanations", flush=True)
+        updated = apply_explanations(questions, multiple, results, data_path=DATA)
+        print(f"Validated and atomically applied {updated} content-grounded explanations", flush=True)
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

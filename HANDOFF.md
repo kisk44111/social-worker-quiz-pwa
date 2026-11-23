@@ -523,12 +523,12 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 
 1. **local `main` 過期**：本地 `main` 在 `d40489b`，遠端 main 已到 `801f652`。第一次開發若未 fetch/pull 就修改／推送，很容易產生回退。先同步。
 2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
-3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`rebuild_mc_explanations.py` 會直接寫 `questions.json`。務必在獨立分支執行、檢查 diff、跑全測試、保留官方來源與 hash；不可直接對 main 大批重跑。
-4. **OpenRouter script 的 token 風險**：`generate_content_mc_explanations.py` 會使用 Keychain token 與外部 API。只能在使用者明確授權、可負擔額度、且確認題目內容可傳送的情況下執行；絕不可記錄或回傳 key。
+3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`rebuild_mc_explanations.py` 會直接寫 `questions.json`（其中 `generate_content_mc_explanations.py` 已於本次重構加入寫入前 `validate_questions` 驗證與同目錄暫存檔原子替換）。務必在獨立分支執行、檢查 diff、跑全測試、保留官方來源與 hash；不可直接對 main 大批重跑。
+4. **~~OpenRouter script 的 token 風險~~（已完成修復／本次重構）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 
 ## P1：功能一致性與資料完整性
 
-1. **備份合併不完整**：`mergeLearningStates()` 目前只合併收藏、錯題與累計數，沒有合併逐題 attempts、reviews、notes、tags、mockExams、essayPractices、resume、plan、errataNotes。畫面宣稱「備份與還原」但使用者可能合理期待進階資料也保留。修正時需以 stable ID 去重、定義衝突優先規則、版本升級並寫 migration tests。
+1. **~~備份合併不完整~~（已完成修復／Commit `fa42f18`）**：`data-store.js` 的 `isValidLearningState()` 已補齊 `notes`、`tags`、`customTags`、`errataNotes`、`plan`、`resume` 與陣列元素結構驗證；`mergeLearningStates()` 已重構為確定性無損合併，完整涵蓋 `attempts`（ID／組合鍵去重，上限 5,000）、`reviews`（較新排程優先）、`mockExams`（ID 去重與已完成優先，上限 100）、`essayPractices`（非空且較新優先，上限 500）、`notes`／`errataNotes`（非破壞式雙邊分隔合併且具冪等性）、`tags`／`customTags`（聯集去重）與 `plan`／`resume`（非空／較新優先），並新增 4 組單元與 v1 舊備份迴歸測試且同步升級 PWA 快取至 `v27`。
 2. **`errataNotes` 沒有新增 UI**：state 與顯示分支已存在，但使用者沒有介面可寫入此欄位。應補輸入介面或移除未使用欄位前先考量舊備份相容性。
 3. **公職社工師首頁按鈕命名不精準**：公職題全是申論，但 `renderLibrary()` 的快速按鈕顯示「10 題隨機申論複習」；要確認流程名稱、統計與模擬考是否符合使用者期待。分科模擬只為專技五科設計。
 4. **統計總數與逐題歷程的語意**：舊版僅有 `answered/correct` 累計數，趨勢與各科統計只由新 attempts 計算。這是正確的保守做法，但 UI 需繼續清楚說明，不能把舊總數推測成歷程。
