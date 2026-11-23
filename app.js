@@ -3,7 +3,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const state = {
   questions: [], view: 'library', stack: [], currentList: [], currentIndex: 0,
   favorites: new Set(), wrong: new Set(), answered: 0, correct: 0, attempts: [], reviews: [], mockExams: [], essayPractices: [], resume: null, plan: {weeklyGoal:120,startDate:null}, notes:{}, tags:{}, customTags:[], errataNotes:{}, filters:{},
-  selected: null, submitted: false, examType: 'socialWorker', activeMockId: null, mockIndex: 0, essayStartedAt: null, essayInterval: null
+  selected: null, submitted: false, examType: 'socialWorker', activeMockId: null, mockIndex: 0, essayStartedAt: null, essayInterval: null,
+  essayBlindMode: false, essayRevealedStages: new Set(), essayLastQuestionId: null,
+  essaySpeech: { status: 'idle', rate: 1, continuous: false, activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null }
 };
 const socialSubjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
 const publicSubjects = ['社會福利政策與法規','社會工作實務'];
@@ -30,8 +32,8 @@ function learningSnapshot(){return {favorites:[...state.favorites],wrong:[...sta
 function applyLearningState(saved){state.favorites=new Set(saved.favorites);state.wrong=new Set(saved.wrong);state.answered=saved.answered;state.correct=saved.correct;state.examType=saved.examType;state.attempts=saved.attempts||[];state.reviews=saved.reviews||[];state.mockExams=saved.mockExams||[];state.essayPractices=saved.essayPractices||[];state.resume=saved.resume||null;state.plan=saved.plan||{weeklyGoal:120,startDate:null};state.notes=saved.notes||{};state.tags=saved.tags||{};state.customTags=saved.customTags||[];state.errataNotes=saved.errataNotes||{}}
 function save(){window.learningDataStore.save(learningSnapshot()).catch(()=>{});}
 function shuffle(items){const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function push(view, data={}){state.stack.push({view:state.view});Object.assign(state,data);state.view=view;render()}
-function root(view){state.view=view;state.stack=[];state.selected=null;state.submitted=false;render()}
+function push(view, data={}){if(state.view==='question'&&view!=='question')stopEssaySpeech();state.stack.push({view:state.view});Object.assign(state,data);state.view=view;render()}
+function root(view){stopEssaySpeech();state.view=view;state.stack=[];state.selected=null;state.submitted=false;render()}
 function render(){
   app.dataset.view=state.view;
   back.classList.toggle('hidden', !state.stack.length); tabs.classList.toggle('hidden', state.view==='question');
@@ -117,12 +119,193 @@ function renderList(name,items){
   document.querySelectorAll('.question-link').forEach(b=>b.onclick=()=>{state.currentList=items;state.currentIndex=+b.dataset.i;state.selected=null;state.submitted=false;saveResume();push('question')});
   if($('#paperMode'))$('#paperMode').onclick=()=>{const mock={id:`paper-${Date.now()}`,subject:choices[0].subject,examType:examOf(choices[0]),questionIds:choices.map(q=>q.id),answers:{},flagged:[],startedAt:new Date().toISOString(),elapsedSeconds:0,paperTitle:name,mode:'historicalPaper'};state.mockExams.push(mock);state.activeMockId=mock.id;state.mockIndex=0;save();push('mock')};
 }
-const ESSAY_STAGES=[
+const ESSAY_STAGES=(window.essayStudyTools?.ESSAY_STAGES)||[
   ['qi','起','破題與核心概念界定'],
   ['cheng','承','理論依據與法規政策剖析'],
   ['zhuan','轉','實務應用、困境與批判反思'],
   ['he','合','總結與具體建議展望']
 ];
+const SPEECH_RATES=(window.essayStudyTools?.SPEECH_RATES)||[1,1.25,1.5];
+let cachedZhTwVoice=null;
+function isSpeechSupported(){
+  return typeof window!=='undefined'&&'speechSynthesis'in window&&typeof window.SpeechSynthesisUtterance==='function';
+}
+function resolveZhTwVoice(){
+  if(!isSpeechSupported())return null;
+  try{
+    const voices=window.speechSynthesis.getVoices()||[];
+    if(voices.length)cachedZhTwVoice=window.essayStudyTools?.pickPreferredZhTwVoice(voices)||null;
+  }catch(_){cachedZhTwVoice=null}
+  return cachedZhTwVoice;
+}
+if(isSpeechSupported()){
+  resolveZhTwVoice();
+  try{window.speechSynthesis.addEventListener?.('voiceschanged',resolveZhTwVoice)}catch(_){}
+}
+function syncEssaySpeechUI(scrollActive=false){
+  const sp=state.essaySpeech;
+  const isPlaying=sp.status==='playing', isPaused=sp.status==='paused';
+  const playBtn=$('#essaySpeechPlay'), pauseBtn=$('#essaySpeechPause'), stopBtn=$('#essaySpeechStop'), statusEl=$('#essaySpeechStatus');
+  if(playBtn){
+    playBtn.classList.toggle('is-active',isPlaying);
+    playBtn.setAttribute('aria-pressed',String(isPlaying));
+    playBtn.textContent=isPlaying?'🔊 朗讀中':(isPaused?'▶ 繼續朗讀':'🔊 朗讀本題');
+  }
+  if(pauseBtn){
+    pauseBtn.disabled=sp.status==='idle';
+    pauseBtn.textContent=isPaused?'▶ 繼續':'⏸ 暫停';
+  }
+  if(stopBtn){
+    stopBtn.disabled=sp.status==='idle';
+  }
+  document.querySelectorAll('[data-speech-rate]').forEach(btn=>{
+    const active=Number(btn.dataset.speechRate)===sp.rate;
+    btn.classList.toggle('is-active',active);
+    btn.setAttribute('aria-pressed',String(active));
+  });
+  const commuteToggle=$('#essayCommuteToggle');
+  if(commuteToggle)commuteToggle.checked=Boolean(sp.continuous);
+  if(statusEl){
+    if(sp.statusNote)statusEl.textContent=sp.statusNote;
+    else if(isPlaying&&sp.activeLabel)statusEl.textContent=`▶ 正在朗讀：${sp.activeLabel}（${sp.rate.toFixed(sp.rate===1?1:2).replace(/\.00$/,'.0')}x）`;
+    else if(isPaused&&sp.activeLabel)statusEl.textContent=`⏸ 已暫停於：${sp.activeLabel}`;
+    else statusEl.textContent='依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單';
+  }
+  let activeEl=null;
+  document.querySelectorAll('[data-speech-segment]').forEach(el=>{
+    const match=Boolean(sp.activeSegment&&el.dataset.speechSegment===sp.activeSegment);
+    el.classList.toggle('is-speaking',match);
+    if(match)activeEl=el;
+  });
+  if(scrollActive&&activeEl){
+    const modelBody=$('#essayModelBody');
+    if(modelBody&&modelBody.classList.contains('collapsed')&&['qi','cheng','zhuan','he','legacy'].includes(sp.activeSegment)){
+      modelBody.classList.remove('collapsed');
+      const toggleBtn=$('#toggleEssayModel');
+      if(toggleBtn){toggleBtn.setAttribute('aria-expanded','true');toggleBtn.textContent='收合擬答'}
+    }
+    try{activeEl.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(_){}
+  }
+}
+function stopEssaySpeech(note=''){
+  const sp=state.essaySpeech;
+  if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  sp.sessionId++;
+  if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+  sp.status='idle';
+  sp.activeSegment=null;
+  sp.activeLabel='';
+  sp.statusNote=note;
+  sp.chunks=[];
+  sp.chunkIndex=0;
+  sp.questionId=null;
+  syncEssaySpeechUI(false);
+}
+function speakCurrentEssayChunk(q){
+  const sp=state.essaySpeech;
+  if(!isSpeechSupported()||state.view!=='question'||state.currentList[state.currentIndex]?.id!==q.id){
+    stopEssaySpeech();
+    return;
+  }
+  if(sp.chunkIndex>=sp.chunks.length){
+    if(sp.continuous){
+      const nextIdx=window.essayStudyTools?window.essayStudyTools.findNextEssayIndex(state.currentList,state.currentIndex):-1;
+      if(nextIdx>=0){
+        const mySession=sp.sessionId;
+        sp.statusNote='本題朗讀完成，即將連播下一題⋯';
+        sp.activeSegment=null;
+        syncEssaySpeechUI(false);
+        sp.autoNextTimer=setTimeout(()=>{
+          if(sp.sessionId!==mySession||state.view!=='question')return;
+          sp.autoNextTimer=null;
+          state.currentIndex=nextIdx;
+          saveResume();
+          const nextQ=state.currentList[state.currentIndex];
+          sp.questionId=nextQ.id;
+          renderQuestion();
+          startEssaySpeech(nextQ);
+        },650);
+        return;
+      }
+      stopEssaySpeech('✓ 已完成目前題單全部申論朗讀');
+      return;
+    }
+    stopEssaySpeech('✓ 本題朗讀完成');
+    return;
+  }
+  const chunk=sp.chunks[sp.chunkIndex];
+  const segmentChanged=sp.activeSegment!==chunk.segmentKey;
+  sp.status='playing';
+  sp.activeSegment=chunk.segmentKey;
+  sp.activeLabel=chunk.label;
+  sp.statusNote='';
+  syncEssaySpeechUI(segmentChanged);
+  const utter=new window.SpeechSynthesisUtterance(chunk.text);
+  utter.lang='zh-TW';
+  utter.rate=sp.rate;
+  const voice=resolveZhTwVoice();
+  if(voice)utter.voice=voice;
+  const mySession=sp.sessionId;
+  utter.onend=()=>{
+    if(sp.sessionId!==mySession||sp.status!=='playing')return;
+    sp.chunkIndex++;
+    speakCurrentEssayChunk(q);
+  };
+  utter.onerror=event=>{
+    if(sp.sessionId!==mySession)return;
+    const code=event?.error||'';
+    if(code==='interrupted'||code==='canceled')return;
+    stopEssaySpeech('語音播放中斷，請再點一次朗讀本題');
+  };
+  try{window.speechSynthesis.speak(utter)}
+  catch(_){stopEssaySpeech('目前瀏覽器無法啟動語音合成')}
+}
+function startEssaySpeech(q){
+  if(!isSpeechSupported()||!q)return;
+  const queue=window.essayStudyTools?window.essayStudyTools.buildEssaySpeechQueue(q):[];
+  if(!queue.length){stopEssaySpeech('本題尚無可朗讀文字');return}
+  const sp=state.essaySpeech;
+  if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  sp.sessionId++;
+  try{window.speechSynthesis.cancel()}catch(_){}
+  sp.questionId=q.id;
+  sp.chunks=queue;
+  sp.chunkIndex=0;
+  sp.activeSegment=null;
+  sp.activeLabel='';
+  sp.statusNote='';
+  sp.status='playing';
+  speakCurrentEssayChunk(q);
+}
+function pauseEssaySpeech(){
+  const sp=state.essaySpeech;
+  if(sp.status!=='playing')return;
+  if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
+  sp.sessionId++;
+  if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+  sp.status='paused';
+  sp.statusNote='';
+  syncEssaySpeechUI(false);
+}
+function resumeEssaySpeech(q){
+  const sp=state.essaySpeech;
+  if(sp.status!=='paused'||sp.questionId!==q.id||!sp.chunks.length){startEssaySpeech(q);return}
+  sp.sessionId++;
+  sp.status='playing';
+  sp.statusNote='';
+  speakCurrentEssayChunk(q);
+}
+function setEssaySpeechRate(rate,q){
+  const sp=state.essaySpeech;
+  sp.rate=window.essayStudyTools?window.essayStudyTools.normaliseSpeechRate(rate):Number(rate)||1;
+  if(sp.status==='playing'&&sp.questionId===q.id&&sp.chunks.length){
+    sp.sessionId++;
+    if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+    speakCurrentEssayChunk(q);
+  }else{
+    syncEssaySpeechUI(false);
+  }
+}
 function buildEssayCopyText(q){
   const model=q.essayGuide?.modelAnswer;
   if(model){
@@ -135,19 +318,115 @@ function buildEssayCopyText(q){
   }
   return (q.referenceAnswer||q.explanation||'').trim();
 }
+function renderEssayModelInnerHtml(q){
+  const guide=q.essayGuide, model=guide?.modelAnswer, analysis=guide?.analysis;
+  if(!model)return `<div class="essay-legacy-text" data-speech-segment="legacy">${esc(q.referenceAnswer||'待補充')}</div>`;
+  const blind=Boolean(state.essayBlindMode);
+  const revealedCount=ESSAY_STAGES.filter(([key])=>state.essayRevealedStages.has(key)).length;
+  const allRevealed=revealedCount===ESSAY_STAGES.length;
+  const theoryHints=analysis?.theoriesAndLaws||[];
+  const blindBanner=blind
+    ? `<div class="essay-blind-banner" role="region" aria-label="盲測主動回憶提示">
+        <div class="essay-blind-head">
+          <div><strong>🧠 骨架盲測練習中</strong><span>先看題目、段落標題與理論清單在腦中構思大綱，點擊單段卡片即可揭曉比對（已揭曉 ${revealedCount} / ${ESSAY_STAGES.length} 段）</span></div>
+          <button type="button" class="essay-action-btn" id="toggleRevealAllStages">${allRevealed?'全部重遮':'全部揭曉'}</button>
+        </div>
+        ${theoryHints.length?`<div class="essay-blind-hints"><small>💡 盲測回憶提示：核心理論與法規清單</small><div class="essay-chip-list">${theoryHints.map(item=>`<span class="essay-concept-chip">${esc(item)}</span>`).join('')}</div></div>`:''}
+      </div>`
+    : '';
+  const stagesHtml=`<div class="essay-stages">${ESSAY_STAGES.map(([key,badge,fallbackTitle])=>{
+    const part=model[key]||{};
+    const heading=part.title||fallbackTitle;
+    const isRevealed=!blind||state.essayRevealedStages.has(key);
+    if(blind&&!isRevealed){
+      return `<article class="essay-stage essay-stage-${key} is-blind-masked" data-speech-segment="${key}" data-blind-stage="${key}" role="button" tabindex="0" aria-expanded="false" aria-label="點擊揭曉${badge}段：${esc(heading)}">
+        <header class="essay-stage-head"><span class="essay-stage-badge">${badge}</span><strong>${esc(heading)}</strong><span class="essay-stage-pill">點擊揭曉</span></header>
+        <div class="essay-stage-mask"><span class="essay-mask-icon">👁</span><span>內文已遮蔽 — 先在腦中回想「${badge}｜${esc(heading)}」要點，點擊此卡片即可揭曉比對</span></div>
+      </article>`;
+    }
+    return `<article class="essay-stage essay-stage-${key} ${blind?'is-blind-revealed':''}" data-speech-segment="${key}" data-blind-stage="${key}">
+      <header class="essay-stage-head"><span class="essay-stage-badge">${badge}</span><strong>${esc(heading)}</strong>${blind?`<button type="button" class="essay-remask-btn" data-remask-stage="${key}">重新遮蔽</button>`:''}</header>
+      <div class="essay-stage-text">${esc(part.content||'待補充')}</div>
+    </article>`;
+  }).join('')}</div>`;
+  return `${blindBanner}${stagesHtml}`;
+}
+function bindEssayModelEvents(q){
+  const body=$('#essayModelBody');
+  if(!body)return;
+  const rerenderModel=()=>{
+    body.innerHTML=renderEssayModelInnerHtml(q);
+    bindEssayModelEvents(q);
+    syncEssaySpeechUI(false);
+  };
+  const revealAllBtn=$('#toggleRevealAllStages');
+  if(revealAllBtn){
+    revealAllBtn.onclick=()=>{
+      const allDone=ESSAY_STAGES.every(([key])=>state.essayRevealedStages.has(key));
+      state.essayRevealedStages=allDone?new Set():new Set(ESSAY_STAGES.map(([key])=>key));
+      rerenderModel();
+    };
+  }
+  body.querySelectorAll('.essay-stage.is-blind-masked[data-blind-stage]').forEach(card=>{
+    const reveal=()=>{
+      state.essayRevealedStages=window.essayStudyTools
+        ? window.essayStudyTools.toggleRevealedStage(state.essayRevealedStages,card.dataset.blindStage)
+        : new Set([...state.essayRevealedStages,card.dataset.blindStage]);
+      rerenderModel();
+    };
+    card.onclick=reveal;
+    card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();reveal()}};
+  });
+  body.querySelectorAll('[data-remask-stage]').forEach(btn=>{
+    btn.onclick=e=>{
+      e.stopPropagation();
+      state.essayRevealedStages.delete(btn.dataset.remaskStage);
+      rerenderModel();
+    };
+  });
+}
+function renderEssaySprintBarHtml(q){
+  const speechOk=isSpeechSupported();
+  const sp=state.essaySpeech;
+  const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{position:1,total:1,prevIndex:-1,nextIndex:-1};
+  const hasModel=Boolean(q.essayGuide?.modelAnswer);
+  const speechControls=speechOk
+    ? `<div class="essay-speech-row">
+        <button type="button" class="essay-sprint-btn essay-speech-play ${sp.status==='playing'?'is-active':''}" id="essaySpeechPlay" aria-pressed="${sp.status==='playing'}">${sp.status==='playing'?'🔊 朗讀中':(sp.status==='paused'?'▶ 繼續朗讀':'🔊 朗讀本題')}</button>
+        <button type="button" class="essay-sprint-btn" id="essaySpeechPause" ${sp.status==='idle'?'disabled':''}>${sp.status==='paused'?'▶ 繼續':'⏸ 暫停'}</button>
+        <button type="button" class="essay-sprint-btn" id="essaySpeechStop" ${sp.status==='idle'?'disabled':''}>⏹ 停止</button>
+        <div class="speech-rate-group" role="group" aria-label="朗讀語速">${SPEECH_RATES.map(r=>`<button type="button" class="speech-rate-btn ${sp.rate===r?'is-active':''}" data-speech-rate="${r}" aria-pressed="${sp.rate===r}">${r===1?'1.0x':`${r}x`}</button>`).join('')}</div>
+      </div>
+      <div class="essay-commute-row">
+        <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🎧 通勤連播模式（播完自動接下一題）</span></label>
+        <span id="essaySpeechStatus" class="speech-status" aria-live="polite">依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單</span>
+      </div>`
+    : '';
+  const navControls=pos.total>1
+    ? `<div class="essay-nav-inline">
+        <button type="button" class="essay-action-btn" id="essayPrevBtn" ${pos.prevIndex<0?'disabled':''}>‹ 上一題</button>
+        <span class="essay-nav-count">題單申論 ${pos.position} / ${pos.total}</span>
+        <button type="button" class="essay-action-btn" id="essayNextBtn" ${pos.nextIndex<0?'disabled':''}>下一題 ›</button>
+      </div>`
+    : '';
+  return `<section class="essay-sprint-bar card" aria-label="申論衝刺訓練控制列">
+    <div class="essay-sprint-top">
+      <div class="essay-sprint-title"><span class="eyebrow">考前衝刺工具</span><strong>聽讀記憶與主動回憶</strong></div>
+      <div class="essay-sprint-quick">
+        ${hasModel?`<button type="button" class="essay-sprint-btn essay-blind-toggle ${state.essayBlindMode?'is-active':''}" id="toggleBlindMode" aria-pressed="${state.essayBlindMode}">${state.essayBlindMode?'🧠 盲測模式：開啟':'🧠 盲測練習模式'}</button>`:''}
+        ${navControls}
+      </div>
+    </div>
+    ${speechControls}
+  </section>`;
+}
 function renderEssayAnswersHtml(q){
   const guide=q.essayGuide, model=guide?.modelAnswer, analysis=guide?.analysis;
   const notice=q.aiContent?.limitations||'非考選部官方標準答案或評分依據；法規與實務請以考試當年度有效規定為準。';
-  const modelContent=model
-    ? `<div class="essay-stages">${ESSAY_STAGES.map(([key,badge,fallbackTitle])=>{
-        const part=model[key]||{};
-        return `<article class="essay-stage essay-stage-${key}"><header class="essay-stage-head"><span class="essay-stage-badge">${badge}</span><strong>${esc(part.title||fallbackTitle)}</strong></header><div class="essay-stage-text">${esc(part.content||'待補充')}</div></article>`;
-      }).join('')}</div>`
-    : `<div class="essay-legacy-text">${esc(q.referenceAnswer||'待補充')}</div>`;
   const analysisContent=analysis
     ? `<div class="essay-analysis-grid">
         <section class="essay-analysis-block"><h4><span>🎯</span> 審題與破題關鍵</h4><ul>${(analysis.focusAndTraps||[]).map(item=>`<li>${esc(item)}</li>`).join('')}</ul></section>
-        <section class="essay-analysis-block"><h4><span>📚</span> 核心理論與法規清單</h4><div class="essay-chip-list">${(analysis.theoriesAndLaws||[]).map(item=>`<span class="essay-concept-chip">${esc(item)}</span>`).join('')}</div></section>
+        <section class="essay-analysis-block" data-speech-segment="theories"><h4><span>📚</span> 核心理論與法規清單</h4><div class="essay-chip-list">${(analysis.theoriesAndLaws||[]).map(item=>`<span class="essay-concept-chip">${esc(item)}</span>`).join('')}</div></section>
         <section class="essay-analysis-block"><h4><span>✦</span> 架構與配分要點</h4><ul>${(analysis.scoringRubric||[]).map(item=>`<li>${esc(item)}</li>`).join('')}</ul></section>
       </div>`
     : `<div class="essay-legacy-text">${esc(q.explanation||'待補充')}</div>`;
@@ -161,7 +440,7 @@ function renderEssayAnswersHtml(q){
         </div>
       </div>
       <p class="essay-disclaimer">${model?'結構化四段式參考擬答｜':'參考擬答（舊版格式）｜'}${esc(notice)}</p>
-      <div id="essayModelBody" class="essay-model-body">${modelContent}</div>
+      <div id="essayModelBody" class="essay-model-body">${renderEssayModelInnerHtml(q)}</div>
     </section>
     <section class="answer-box essay-analysis-card">
       <div class="essay-card-head">
@@ -173,9 +452,13 @@ function renderEssayAnswersHtml(q){
   </div>`;
 }
 function renderEssayHtml(q,context){
+  if(state.essayLastQuestionId!==q.id){
+    state.essayRevealedStages=new Set();
+    state.essayLastQuestionId=q.id;
+  }
   const existing=state.essayPractices.find(item=>item.questionId===q.id)||{id:`essay-${q.id}`,questionId:q.id,draft:'',elapsedSeconds:0,selfCheck:{}};
   state.essayStartedAt=Date.now();
-  return `${context}<div class="essay-layout"><article class="question-panel"><span class="eyebrow">申論題</span><p class="question-text">${esc(q.prompt)}</p><div class="essay-timer">作答計時：<strong id="essayTimer">${Math.floor(existing.elapsedSeconds/60)}:${String(existing.elapsedSeconds%60).padStart(2,'0')}</strong></div><label class="essay-label" for="essayDraft">我的擬答（自動暫存）</label><textarea id="essayDraft" class="essay-draft" placeholder="在此輸入擬答；內容只儲存在這台裝置。">${esc(existing.draft)}</textarea><div class="self-check"><strong>自評檢核</strong>${['回應題幹每個小問','說明概念或法規依據','提出可執行的實務作法','補充倫理、限制或配套','結論回扣題旨'].map((label,index)=>`<label><input type="checkbox" data-check="${index}" ${existing.selfCheck?.[index]?'checked':''}>${label}</label>`).join('')}</div><button class="primary" id="saveEssay">儲存本次練習</button></article>${renderEssayAnswersHtml(q)}</div>`;
+  return `${context}${renderEssaySprintBarHtml(q)}<div class="essay-layout"><article class="question-panel" data-speech-segment="prompt"><span class="eyebrow">申論題</span><p class="question-text">${esc(q.prompt)}</p><div class="essay-timer">作答計時：<strong id="essayTimer">${Math.floor(existing.elapsedSeconds/60)}:${String(existing.elapsedSeconds%60).padStart(2,'0')}</strong></div><label class="essay-label" for="essayDraft">我的擬答（自動暫存）</label><textarea id="essayDraft" class="essay-draft" placeholder="在此輸入擬答；內容只儲存在這台裝置。">${esc(existing.draft)}</textarea><div class="self-check"><strong>自評檢核</strong>${['回應題幹每個小問','說明概念或法規依據','提出可執行的實務作法','補充倫理、限制或配套','結論回扣題旨'].map((label,index)=>`<label><input type="checkbox" data-check="${index}" ${existing.selfCheck?.[index]?'checked':''}>${label}</label>`).join('')}</div><button class="primary" id="saveEssay">儲存本次練習</button></article>${renderEssayAnswersHtml(q)}</div>`;
 }
 function saveEssayPractice(q,completed=false){
   const draft=$('#essayDraft')?.value||'', current=state.essayPractices.find(item=>item.questionId===q.id), selfCheck={};document.querySelectorAll('[data-check]').forEach(item=>selfCheck[item.dataset.check]=item.checked);
@@ -193,7 +476,9 @@ function recordPracticeAttempt(q,answer,correct){
 }
 function renderQuestion(){
   if(state.essayInterval){clearInterval(state.essayInterval);state.essayInterval=null}
-  const q=state.currentList[state.currentIndex], letters=['A','B','C','D']; title.textContent=q.type==='essay'?'申論題':`第 ${state.currentIndex+1}／${state.currentList.length} 題`;
+  const q=state.currentList[state.currentIndex], letters=['A','B','C','D'];
+  if(state.essaySpeech.status!=='idle'&&state.essaySpeech.questionId!==q.id)stopEssaySpeech();
+  title.textContent=q.type==='essay'?'申論題':`第 ${state.currentIndex+1}／${state.currentList.length} 題`;
   const accepted=q.acceptedAnswers||[q.answer],passed=accepted.includes(state.selected);const opts=q.options.map((o,i)=>{const l=letters[i];let cls=state.selected===l?'selected ':'';if(state.submitted&&accepted.includes(l))cls+='correct';else if(state.submitted&&l===state.selected)cls+='incorrect';return `<button class="row option ${cls}" data-letter="${l}" ${state.submitted?'disabled':''}><span class="letter">${l}</span><span>${esc(o)}</span></button>`}).join('');
   const result=state.submitted?`<div class="result ${passed?'good':'bad'}">${passed?'✓ 答對了':'✕ 正確答案：'+esc(accepted.join(' 或 '))}</div>${q.explanation?`<div class="answer-box"><h3>💡 完整詳解</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation)}</div><p class="muted">詳解為學習輔助；選擇題答案以考選部公告及更正答案為準。法規題請以該考試年度有效法規為準。</p></div>`:''}`:'';
   const progress=Math.round((state.currentIndex+1)/state.currentList.length*100);
@@ -206,6 +491,42 @@ function renderQuestion(){
   if(q.type==='essay'){
     let draftTimer;$('#essayDraft').oninput=()=>{clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveEssayPractice(q),500)};
     $('#saveEssay').onclick=()=>{saveEssayPractice(q,true);$('#saveEssay').textContent='已儲存';};
+    bindEssayModelEvents(q);
+    syncEssaySpeechUI(false);
+    if($('#essaySpeechPlay'))$('#essaySpeechPlay').onclick=()=>{
+      if(state.essaySpeech.status==='playing'&&state.essaySpeech.questionId===q.id)pauseEssaySpeech();
+      else if(state.essaySpeech.status==='paused'&&state.essaySpeech.questionId===q.id)resumeEssaySpeech(q);
+      else startEssaySpeech(q);
+    };
+    if($('#essaySpeechPause'))$('#essaySpeechPause').onclick=()=>{
+      if(state.essaySpeech.status==='playing')pauseEssaySpeech();
+      else if(state.essaySpeech.status==='paused')resumeEssaySpeech(q);
+    };
+    if($('#essaySpeechStop'))$('#essaySpeechStop').onclick=()=>stopEssaySpeech();
+    document.querySelectorAll('[data-speech-rate]').forEach(btn=>btn.onclick=()=>setEssaySpeechRate(Number(btn.dataset.speechRate),q));
+    if($('#essayCommuteToggle'))$('#essayCommuteToggle').onchange=e=>{state.essaySpeech.continuous=Boolean(e.target.checked)};
+    if($('#toggleBlindMode'))$('#toggleBlindMode').onclick=()=>{
+      state.essayBlindMode=!state.essayBlindMode;
+      state.essayRevealedStages=new Set();
+      const btn=$('#toggleBlindMode'), body=$('#essayModelBody'), toggleBtn=$('#toggleEssayModel');
+      if(btn){
+        btn.classList.toggle('is-active',state.essayBlindMode);
+        btn.setAttribute('aria-pressed',String(state.essayBlindMode));
+        btn.textContent=state.essayBlindMode?'🧠 盲測模式：開啟':'🧠 盲測練習模式';
+      }
+      if(body){
+        if(state.essayBlindMode&&body.classList.contains('collapsed')){
+          body.classList.remove('collapsed');
+          if(toggleBtn){toggleBtn.setAttribute('aria-expanded','true');toggleBtn.textContent='收合擬答'}
+        }
+        body.innerHTML=renderEssayModelInnerHtml(q);
+        bindEssayModelEvents(q);
+        syncEssaySpeechUI(false);
+      }
+    };
+    const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{prevIndex:-1,nextIndex:-1};
+    if($('#essayPrevBtn'))$('#essayPrevBtn').onclick=()=>{if(pos.prevIndex>=0){stopEssaySpeech();state.currentIndex=pos.prevIndex;saveResume();renderQuestion();scrollTo(0,0)}};
+    if($('#essayNextBtn'))$('#essayNextBtn').onclick=()=>{if(pos.nextIndex>=0){stopEssaySpeech();state.currentIndex=pos.nextIndex;saveResume();renderQuestion();scrollTo(0,0)}};
     if($('#toggleEssayModel'))$('#toggleEssayModel').onclick=()=>{
       const body=$('#essayModelBody'),btn=$('#toggleEssayModel');
       const collapsed=body.classList.toggle('collapsed');
@@ -274,7 +595,9 @@ function renderStats(){
   title.textContent='學習統計';const accuracy=state.answered?Math.round(state.correct/state.answered*100):0,config=activeConfig(),questions=examQuestions(),isPublic=state.examType==='publicSocialWorker',stats=studyEngine.subjectStats(state.attempts,state.examType),last7=studyEngine.lastSevenDays(state.attempts),weekly=studyEngine.weeklyTrend(state.attempts),bySubject=new Map(stats.map(item=>[item.subject,item]));
   app.innerHTML=`<div class="exam-context-badge">目前顯示：${config.label}</div><div class="stat-grid"><div class="card stat"><strong>${state.answered}</strong>累計作答</div><div class="card stat"><strong>${state.correct}</strong>答對題數</div><div class="card stat"><strong>${accuracy}%</strong>正確率</div><div class="card stat"><strong>${studyEngine.dueReviews(state.reviews,new Date(),state.examType).length}</strong>待複習錯題</div></div><div class="section-title">${isPublic?'科目表現':'五科學習表現'}</div><section>${config.subjects.map(subject=>{const item=bySubject.get(subject)||{answered:0,correct:0,accuracy:0};return `<div class="card"><strong>${esc(subject)}</strong><p class="muted">${item.answered} 題・答對 ${item.correct} 題・正確率 ${item.accuracy}%</p></div>`}).join('')}</section><div class="section-title">每週趨勢</div><div class="card">${weekly.map(item=>`${item.week.slice(5)}：${item.answered} 題${item.accuracy===null?'':'・'+item.accuracy+'%'}`).join('　')}</div><div class="section-title">近 7 天學習</div><div class="card">${last7.map(item=>`${item.date.slice(5)}：${item.answered} 題${item.accuracy===null?'':'・'+item.accuracy+'%'}`).join('　')}</div><div class="section-title">資料說明</div><div class="card">${isPublic?`收錄 ${config.period} 年公職社工師兩科考選部正式試題，共 ${questions.length} 題申論題。`:`收錄 2021–2026 年社工師五科考選部試題，共 ${questions.length.toLocaleString()} 題。`}<p class="muted">舊版只有累計資料，僅列為總摘要；各科與趨勢只從本次更新後的新作答紀錄開始計算。</p></div>`;
 }
-back.onclick=()=>{const last=state.stack.pop();state.view=last?.view||'library';state.selected=null;state.submitted=false;render()};
+back.onclick=()=>{stopEssaySpeech();const last=state.stack.pop();state.view=last?.view||'library';state.selected=null;state.submitted=false;render()};
+window.addEventListener('pagehide',()=>stopEssaySpeech());
+window.addEventListener('beforeunload',()=>stopEssaySpeech());
 tabs.onclick=e=>{const b=e.target.closest('[data-tab]');if(b)root(b.dataset.tab)};
 window.addEventListener('online',()=>$('#offline').classList.add('hidden'));window.addEventListener('offline',()=>$('#offline').classList.remove('hidden'));
 let installPrompt;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#install').classList.remove('hidden')});

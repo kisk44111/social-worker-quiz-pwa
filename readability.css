@@ -115,3 +115,76 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .essay-analysis-block h4{color:#ccc5ff}
   .essay-concept-chip{background:#332d4c;border-color:#5f5686;color:#e0daff}
 }
+
+/* Essay sprint tools: Web Speech TTS player + Skeleton Blind Recall — build 29 */
+.essay-sprint-bar{margin:0 0 16px;padding:14px 16px;border-radius:16px;border:1px solid #d7d1f2;background:linear-gradient(180deg,#faf9ff 0%,#f3f0fc 100%);display:grid;gap:12px}
+.essay-sprint-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.essay-sprint-title strong{display:block;font-size:15.5px;color:#262044;margin-top:2px}
+.essay-sprint-quick{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.essay-speech-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.essay-sprint-btn{min-height:38px;padding:7px 13px;border:1px solid #c7c0eb;border-radius:11px;background:#ffffff;color:#382f84;font:inherit;font-size:13.5px;font-weight:750;cursor:pointer;transition:.15s ease}
+.essay-sprint-btn:hover:not(:disabled){background:#ece8fa;border-color:#9388db}
+.essay-sprint-btn:disabled{opacity:.48;cursor:not-allowed}
+.essay-speech-play{background:#4f46a5;border-color:#4f46a5;color:#ffffff}
+.essay-speech-play:hover:not(:disabled){background:#3f378f;border-color:#3f378f;color:#ffffff}
+.essay-speech-play.is-active{background:#176d60;border-color:#176d60;color:#ffffff;box-shadow:0 0 0 3px rgba(23,109,96,.2)}
+.essay-blind-toggle.is-active{background:#9a5b13;border-color:#9a5b13;color:#ffffff;box-shadow:0 0 0 3px rgba(154,91,19,.18)}
+.speech-rate-group{display:inline-flex;border:1px solid #cbc4ec;border-radius:11px;overflow:hidden;background:#ffffff}
+.speech-rate-btn{min-height:36px;padding:6px 10px;border:0;border-right:1px solid #e0dcf4;background:transparent;color:#4a436e;font:inherit;font-size:13px;font-weight:750;cursor:pointer}
+.speech-rate-btn:last-child{border-right:0}
+.speech-rate-btn.is-active{background:#4f46a5;color:#ffffff}
+.essay-commute-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px dashed #d6d0ef}
+.commute-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:#2f2857;cursor:pointer;user-select:none}
+.commute-toggle input{width:17px;height:17px;accent-color:#4f46a5;cursor:pointer}
+.speech-status{font-size:13px;font-weight:700;color:#4f46a5;background:#ece8fa;padding:5px 11px;border-radius:999px;line-height:1.4}
+.essay-nav-inline{display:inline-flex;align-items:center;gap:6px}
+.essay-nav-count{font-size:12.5px;font-weight:750;color:#575077;padding:0 4px}
+[data-speech-segment].is-speaking{border-color:#4f46a5 !important;box-shadow:0 0 0 3px rgba(79,70,165,.28),0 10px 24px rgba(79,70,165,.14) !important;background:#f7f5ff !important;transition:box-shadow .2s ease,border-color .2s ease,background .2s ease}
+.essay-blind-banner{margin:0 0 14px;padding:13px 15px;border-radius:13px;border:1px solid #e6c695;background:#fff9ef;display:grid;gap:10px}
+.essay-blind-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.essay-blind-head strong{display:block;font-size:14.5px;color:#7a4508;margin-bottom:3px}
+.essay-blind-head span{display:block;font-size:13px;line-height:1.55;color:#664926}
+.essay-blind-hints small{display:block;font-size:12.5px;font-weight:800;color:#7a4508;margin-bottom:7px}
+.essay-stage.is-blind-masked{cursor:pointer;border-style:dashed;border-color:#c6bceb;background:#fbfaff;transition:.16s ease}
+.essay-stage.is-blind-masked:hover{border-color:#4f46a5;background:#f3f0fd;transform:translateY(-1px)}
+.essay-stage.is-blind-masked:focus-visible{outline:3px solid rgba(79,70,165,.45);outline-offset:2px}
+.essay-stage-pill{margin-left:auto;padding:4px 10px;border-radius:999px;background:#ece8fa;color:#413796;font-size:12px;font-weight:800;flex:0 0 auto}
+.essay-remask-btn{margin-left:auto;min-height:30px;padding:4px 10px;border:1px solid #d5cfea;border-radius:999px;background:#ffffff;color:#5a527e;font:inherit;font-size:12px;font-weight:700;cursor:pointer;flex:0 0 auto}
+.essay-remask-btn:hover{background:#f1eefb;color:#362d82}
+.essay-stage-mask{display:flex;align-items:center;gap:10px;padding:14px 14px;border-radius:11px;background:repeating-linear-gradient(135deg,#f3f0fb,#f3f0fb 10px,#ece7f8 10px,#ece7f8 20px);color:#463e6e;font-size:14px;font-weight:650;line-height:1.6}
+.essay-mask-icon{font-size:18px;flex:0 0 auto}
+@media(max-width:600px){
+  .essay-sprint-bar{padding:12px}
+  .essay-sprint-quick,.essay-speech-row{width:100%}
+  .essay-speech-play,.essay-blind-toggle{flex:1;text-align:center}
+  .speech-rate-group{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}
+  .essay-nav-inline{width:100%;justify-content:space-between}
+  .speech-status{width:100%;border-radius:10px}
+}
+@media(prefers-color-scheme:dark){
+  .essay-sprint-bar{background:linear-gradient(180deg,#252136 0%,#1f1c2e 100%);border-color:#494168}
+  .essay-sprint-title strong{color:#f4f1fc}
+  .essay-sprint-btn{background:#2d2842;border-color:#5b5282;color:#eae6ff}
+  .essay-sprint-btn:hover:not(:disabled){background:#3a3456;border-color:#897fc4}
+  .essay-speech-play{background:#665cd6;border-color:#665cd6;color:#ffffff}
+  .essay-speech-play:hover:not(:disabled){background:#776ee2;border-color:#776ee2}
+  .essay-speech-play.is-active{background:#1f7f70;border-color:#1f7f70;box-shadow:0 0 0 3px rgba(56,196,174,.28)}
+  .essay-blind-toggle.is-active{background:#b8701d;border-color:#b8701d;color:#ffffff;box-shadow:0 0 0 3px rgba(224,154,68,.26)}
+  .speech-rate-group{background:#252136;border-color:#544b78}
+  .speech-rate-btn{border-right-color:#3d3659;color:#cfc9e6}
+  .speech-rate-btn.is-active{background:#665cd6;color:#ffffff}
+  .essay-commute-row{border-top-color:#433c61}
+  .commute-toggle{color:#e8e4f6}
+  .speech-status{background:#342d52;color:#d8d2ff}
+  .essay-nav-count{color:#c9c3de}
+  [data-speech-segment].is-speaking{border-color:#9e94ff !important;box-shadow:0 0 0 3px rgba(158,148,255,.38),0 10px 26px rgba(0,0,0,.45) !important;background:#2a2442 !important}
+  .essay-blind-banner{background:#2f2518;border-color:#73562c}
+  .essay-blind-head strong,.essay-blind-hints small{color:#ffd899}
+  .essay-blind-head span{color:#e6cfa9}
+  .essay-stage.is-blind-masked{background:#211d30;border-color:#5b5282}
+  .essay-stage.is-blind-masked:hover{background:#2a2540;border-color:#9e94ff}
+  .essay-stage-pill{background:#3a3358;color:#dfd9ff}
+  .essay-remask-btn{background:#2c2640;border-color:#584f7d;color:#d6d0ed}
+  .essay-remask-btn:hover{background:#3a3357;color:#ffffff}
+  .essay-stage-mask{background:repeating-linear-gradient(135deg,#27223a,#27223a 10px,#211d31 10px,#211d31 20px);color:#dbd5f2}
+}

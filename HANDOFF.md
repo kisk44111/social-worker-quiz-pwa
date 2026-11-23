@@ -11,13 +11,14 @@
 
 ### Git 快照
 
-- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，本輪歸檔前最新題庫完工提交為 `c8fc487`（全題庫 160 / 160 題申論結構化擬答與解析 100% 達陣）。
+- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v29` 申論聽讀與骨架盲測功能。
 - GitHub Pages 使用 **legacy Pages**，來源是 `main` 分支根目錄 `/`，不是 Actions artifact，也不是 `gh-pages` 分支。
 - 近期核心里程碑（皆已合併並部署至 `origin/main`）：
   - `fa42f18`：`data-store.js` 補齊進階欄位驗證與確定性無損備份合併，新增 4 組測試並升級 PWA 至 `v27`。
   - `e883088`：`tools/generate_content_mc_explanations.py` 安全重構（零 Keychain 預設讀取、雙重確認旗標、寫前驗證與原子寫入）。
   - `b325e24`：升級 PWA 至 **`v28`**，推出申論題雙區塊 UI（【AI 參考擬答（起・承・轉・合）】＋【答題解析與得分要點】）、`essayGuide` 結構驗證測試，以及零外部 API 依賴的離線批次工具 `tools/generate_essay_answers.py`。
   - `7c9c349`、`1072885`、`13fa297`、`5b851e6`、`40e6138`、`e1c98fa`、`c8fc487`：分科完成**專技社工師五科（120 題）＋公職社工師兩科（40 題）共 160 / 160 題（100.0%）**結構化申論擬答與解析匯入，且全程通過 `npm test` 驗證。
+  - **`v29`（已部署）**：新增純原生申論考前衝刺雙工具——**Web Speech API 申論聽讀播放器（單題「題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單」朗讀、分段高亮、1.0x／1.25x／1.5x 語速、通勤連播下一題）**與**骨架盲測（主動回憶）訓練模式**；新增純函式模組 `essay-study-tools.js` 與 5 項單元測試 `tests/essay-study-tools.test.cjs`，同步升級 PWA 快取至 `v29`。
 - 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則
@@ -79,6 +80,7 @@
 ├── app.js
 ├── data-store.js
 ├── desktop.css
+├── essay-study-tools.js
 ├── exam-cram-guides.css
 ├── exam-cram-guides.js
 ├── historical-related-concepts.js
@@ -110,6 +112,7 @@
 │   │   ├── __init__.cpython-311.pyc
 │   │   └── test_questions_validation.cpython-311.pyc
 │   ├── data-store.test.cjs
+│   ├── essay-study-tools.test.cjs
 │   ├── exam-cram-guides.test.cjs
 │   ├── historical-theory-dossiers.test.cjs
 │   ├── knowledge-base.test.cjs
@@ -138,6 +141,7 @@
 | `app.js` | 約 53 KB 的單檔 SPA controller。定義 `state`、考試別／科目設定、畫面路由堆疊與所有 renderer。主要函式：`renderLibrary`、`renderSubject`、`renderList`、`renderQuestion`、`renderKnowledge`、`renderDataManagement`、`renderMockSetup`、`renderMock`、`renderMockResult`、`renderStats`、`loadQuestions`、`bootstrap`。依賴 `learningDataStore`、`studyEngine`、`examKnowledgeBase`、`examCramGuides` 與理論檔案 globals。所有使用者可見字串插值原則上經 `esc()` HTML escape。 |
 | `questions.json` | 約 7.9 MB 靜態題庫，唯一正式題目資料來源（含全 160 題結構化 `essayGuide`）。`app.js` 以 `fetch('./questions.json', {cache:'no-cache'})` 載入；Service Worker 為它另建 data cache。 |
 | `data-store.js` | UMD/IIFE 模組；瀏覽器掛到 `window.learningDataStore`，Node 測試可 `require`。定義 IndexedDB adapter、localStorage legacy migration、資料正規化、備份格式驗證與合併。 |
+| `essay-study-tools.js` | UMD/IIFE 純函式模組；瀏覽器掛到 `window.essayStudyTools`，Node 測試可 `require`。負責申論語音分段排程與 Markdown 清理切塊、`zh-TW` 語音優先選擇、跨題單通勤連播索引計算及盲測段落揭曉狀態操作。 |
 | `study-engine.js` | UMD/IIFE 模組；掛到 `window.studyEngine`。提供間隔複習、正確率、近 7 日／週趨勢、模擬考計分、加權推薦與每日任務純函式。 |
 | `sw-cache-policy.js` | Service Worker 與 Node 測試共用的 UMD cache namespace policy；確保只刪 `social-worker-quiz-pwa-` 前綴快取。 |
 | `service-worker.js` | 手寫 PWA install/activate/fetch 處理；詳見第 4 節。 |
@@ -181,7 +185,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 | 檔案 | 說明 |
 |---|---|
-| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 29 項）。 |
+| `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 34 項）。 |
+| `tests/essay-study-tools.test.cjs` | 申論語音分段排序與長文切塊、`zh-TW` 語音優先選取、混合題單通勤連播索引、盲測單段揭曉切換與語速正規化 5 項測試。 |
 | `tests/study-engine.test.cjs` | 1/3/7/14 天複習、統計、已更正答案計分、加權推薦、週趨勢。 |
 | `tests/sw-cache-policy.test.cjs` | 快取隔離，避免刪到同 GitHub Pages 網域其他專案。 |
 | `tests/knowledge-base.test.cjs` | 卡片結構、來源索引與五科覆蓋。 |
@@ -428,8 +433,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 - 先 `importScripts('./sw-cache-policy.js')`。
 - cache namespace prefix 是 **`social-worker-quiz-pwa-`**，由 `sw-cache-policy.js` 統一管理。
-- 目前 active asset cache：`social-worker-quiz-pwa-assets-v28`。
-- 目前 active question data cache：`social-worker-quiz-pwa-data-v28`。
+- 目前 active asset cache：`social-worker-quiz-pwa-assets-v29`。
+- 目前 active question data cache：`social-worker-quiz-pwa-data-v29`。
 - install：對 `ASSETS` 的 HTML、CSS、JS、manifest、icons 執行 `cache.addAll()`。
 - activate：只刪除同 prefix 且不在 `[CACHE, DATA_CACHE]` 的舊 cache；同網域其他 GitHub Pages repo 的 caches 不會被刪除。
 - navigation request：**Network-first**；成功時把 `./` 緩存，網路失敗時回傳 cache 的 `./`。
@@ -441,9 +446,9 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 這是非常重要的操作程序。因 static resource 是 cache-first，**只改檔案內容不改 URL 很容易讓 PWA 留在舊版。**
 
-1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=28`、`readability.css?build=28`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
+1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=29`、`readability.css?build=29`、`essay-study-tools.js?build=29`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
 2. 在 `service-worker.js` 的 `ASSETS` 使用完全相同的新 URL。
-3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v28` → `v29`）。
+3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v29` → `v30`）。
 4. 確認新 cache 的 `ASSETS` 包含所有新增檔案；否則離線初次安裝會失敗，因 `cache.addAll()` 任一項失敗就會造成 install 失敗。
 5. 不要更改 `SWCachePolicy.CACHE_PREFIX`，除非有 migration 理由與 cache-isolation test。
 6. 以新瀏覽器 profile／實機 PWA 驗證：「更新」提示、更新後 reload、離線重新開啟與舊 cache 清除。
@@ -526,7 +531,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 | 分科模擬考 | 五科每科隨機 40 選擇題；計時、題號導覽、標記、交卷確認；交卷前不顯示答案。 | `renderMockSetup()`、`renderMock()`。 |
 | 五科連續模擬 | 五科各抽 40 題，合計 200 題，結果有分科統計。 | `renderMockSetup()`、`renderMockResult()`。 |
 | 歷屆完整試卷模式 | 題單剛好有 40 選擇題時可進入 historical paper mode。 | `renderList()` 的 `#paperMode`。 |
-| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 升級為雙區塊結構化離線解答——【區塊 01：AI 參考擬答（起・承・轉・合）】可摺疊卡片＋一鍵複製＋非官方警語，以及【區塊 02：答題解析與得分要點】（命題焦點與陷阱、核心理論與法規依據、閱卷評分要點與配分建議），全庫 160 題 100% 完備並保留舊版純文字平滑降級相容。 | `renderEssayHtml()`、`saveEssayPractice()`、`readability.css`。 |
+| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 雙區塊結構化離線解答（起・承・轉・合擬答＋三類解析要點，全庫 160 題 100% 完備）；`v29` 新增 Web Speech API 語音聽讀播放器（題目→起→承→轉→合→核心理論與法規清單、分段高亮、`1.0x/1.25x/1.5x` 語速、通勤連播下一題）與骨架盲測（主動回憶）訓練開關。 | `renderEssayHtml()`、`renderEssaySprintBarHtml()`、`essay-study-tools.js`、`readability.css`。 |
 | 筆記、標籤與勘誤 | 每題能寫筆記、加入／移除自訂標籤；顯示官方來源與更正答案；`errataNotes` 有資料結構但目前 UI 尚未提供新增輸入。 | `questionTools()`、`bindQuestionTools()`。 |
 | 備份與還原 | 匯出 JSON；選檔後驗證與安全合併，不刪現有摘要。 | `renderDataManagement()`、`data-store.js`。 |
 | 知識庫 | 知識卡搜尋、五科大補帖、理論導讀／歷史／內容／架構、具名學者原題、概念延伸題。 | `renderKnowledge()` + 知識 JS/CSS 模組。 |
@@ -542,7 +547,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 ## P0：資料與發布安全
 
 1. **~~local `main` 過期~~（已同步完成／HEAD `c8fc487`）**：本地 `main` 已與遠端 `origin/main` 完全同步；後續開發前仍應維持先 `git fetch origin`、`git status` 確認對齊再動工的紀律。
-2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v28`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
+2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v29`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
 3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`generate_essay_answers.py`、`rebuild_mc_explanations.py` 會寫入 `questions.json`（其中 `generate_content_mc_explanations.py` 與 `generate_essay_answers.py` 皆已內建寫入前 `validate_questions` 全庫驗證與同目錄暫存檔原子替換 `os.replace`）。仍須檢查 diff、跑全測試、保留官方來源與 hash。
 4. **~~OpenRouter script 的 token 風險~~（已完成修復／Commit `e883088`）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 
