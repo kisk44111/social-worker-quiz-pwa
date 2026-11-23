@@ -1,11 +1,11 @@
 importScripts('./sw-cache-policy.js');
 
-const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v15`;
-const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v15`;
+const CACHE = `${SWCachePolicy.CACHE_PREFIX}assets-v16`;
+const DATA_CACHE = `${SWCachePolicy.CACHE_PREFIX}data-v16`;
 const ASSETS = [
   './', './index.html', './styles.css?build=9', './theme.css?build=9',
-  './desktop.css?build=9', './readability.css?build=13', './data-store.js?build=15', './study-engine.js?build=16',
-  './app.js?build=16', './manifest.webmanifest', './icon-192.png', './icon-512.png'
+  './desktop.css?build=9', './readability.css?build=13', './knowledge-base.css?build=1', './data-store.js?build=15', './study-engine.js?build=16',
+  './knowledge-base.js?build=1', './app.js?build=17', './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 
 function cacheResponse(cacheName, request, response) {
