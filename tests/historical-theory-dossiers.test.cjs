@@ -10,6 +10,7 @@ function loadTheoryData() {
   vm.runInNewContext(fs.readFileSync('historical-theory-content.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('historical-theory-primers.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('theory-completion.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('theory-gap-additions.js', 'utf8'), context);
   return context.window;
 }
 
@@ -20,6 +21,17 @@ test('歷屆學者理論檔案具備完整精讀結構', () => {
     assert.ok(dossier.id && dossier.scholar && dossier.theory && dossier.history && dossier.status);
     assert.ok(dossier.framework.length >= 1 && dossier.points.length >= 1 && dossier.traps.length >= 1);
     assert.ok(dossier.terms.length >= 2);
+  }
+});
+
+test('第二輪反查的理論缺漏均有完整導讀與歷屆題連結', () => {
+  const { theoryGapDossiers } = loadTheoryData();
+  const questions = JSON.parse(fs.readFileSync('questions.json', 'utf8'));
+  assert.ok(theoryGapDossiers.length >= 8);
+  for (const dossier of theoryGapDossiers) {
+    assert.ok(dossier.primer?.background?.length >= 30 && dossier.primer?.plain?.length >= 30 && dossier.primer?.example?.length >= 30, `${dossier.theory} 缺少初學者導讀`);
+    const count = questions.filter(question => dossier.directTerms.some(term => (question.prompt + ' ' + question.options.join(' ')).includes(term))).length;
+    assert.ok(count > 0, `${dossier.theory} 未連回任何歷屆題`);
   }
 });
 
