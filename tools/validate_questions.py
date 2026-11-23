@@ -17,10 +17,34 @@ SOCIAL_SUBJECTS = {
 }
 PUBLIC_SUBJECTS = {"社會福利政策與法規", "社會工作實務"}
 COMMON_FIELDS = {"id", "year", "session", "subject", "number", "type", "prompt", "options", "answer", "questionPDF", "answerPDF", "explanation"}
+ESSAY_STAGES = ("qi", "cheng", "zhuan", "he")
+ESSAY_ANALYSIS_FIELDS = ("focusAndTraps", "theoriesAndLaws", "scoringRubric")
 
 
 def issue(errors: list[str], index: int, message: str) -> None:
     errors.append(f"第 {index + 1} 筆：{message}")
+
+
+def validate_essay_guide(errors: list[str], index: int, guide: Any) -> None:
+    if not isinstance(guide, dict):
+        issue(errors, index, "essayGuide 必須是物件。")
+        return
+    model = guide.get("modelAnswer")
+    if not isinstance(model, dict):
+        issue(errors, index, "essayGuide.modelAnswer 必須是物件。")
+    else:
+        for stage in ESSAY_STAGES:
+            part = model.get(stage)
+            if not isinstance(part, dict) or not isinstance(part.get("title"), str) or not part["title"].strip() or not isinstance(part.get("content"), str) or not part["content"].strip():
+                issue(errors, index, f"essayGuide.modelAnswer.{stage} 必須包含非空白的 title 與 content。")
+    analysis = guide.get("analysis")
+    if not isinstance(analysis, dict):
+        issue(errors, index, "essayGuide.analysis 必須是物件。")
+    else:
+        for field in ESSAY_ANALYSIS_FIELDS:
+            items = analysis.get(field)
+            if not isinstance(items, list) or not items or not all(isinstance(item, str) and item.strip() for item in items):
+                issue(errors, index, f"essayGuide.analysis.{field} 必須是非空白字串陣列。")
 
 
 def validate_questions(questions: Any) -> list[str]:
@@ -71,6 +95,12 @@ def validate_questions(questions: Any) -> list[str]:
             needed_source = {"sourceUrl", "answerSourceUrl", "answerVersion", "verifiedAt", "questionSha256", "answerSha256"}
             if not isinstance(source, dict) or needed_source - source.keys() or not all(isinstance(source.get(key), str) and source[key] for key in needed_source):
                 issue(errors, index, "source 缺少官方來源、版本或核對資訊。")
+
+        if "essayGuide" in question:
+            if question["type"] != "essay":
+                issue(errors, index, "只有申論題可包含 essayGuide。")
+            else:
+                validate_essay_guide(errors, index, question["essayGuide"])
 
         question_type = question["type"]
         if question_type not in {"multipleChoice", "essay"}:

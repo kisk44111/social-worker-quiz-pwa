@@ -67,3 +67,51 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
 
 .filter-panel{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:-6px 0 18px}.filter-panel select{min-height:42px;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--surface);color:inherit;font:inherit}.filter-panel .row{margin:0;padding:9px;text-align:center}.question-tools{margin-top:18px}.question-tools h3{margin-top:0}.tag-list{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.tag{border:1px solid #cfc9ef;border-radius:999px;background:#eeecf9;color:var(--indigo);padding:5px 9px;font:inherit;font-size:12px}.tag-input{display:flex;gap:8px}.tag-input input{flex:1;min-height:40px;border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--surface);color:inherit}.tag-input .row{width:auto;margin:0;padding:9px 14px}.source-details{margin-top:16px;font-size:13px}.source-details a{color:var(--indigo)}.errata-note{margin-top:10px;padding:10px;border-radius:10px;background:#fff5df;color:#6f4c13;font-size:13px;line-height:1.55}
 @media(max-width:750px){.filter-panel{grid-template-columns:1fr 1fr}.filter-panel .row{grid-column:1/-1}}@media(prefers-color-scheme:dark){.filter-panel select,.tag-input input{background:#1f1c26;color:#f4f2f8;border-color:#403b49}.tag{background:#39334e;color:#d1caff;border-color:#655d82}.errata-note{background:#493a22;color:#ffe2a9}}
+
+/* Structured essay answer UI (起・承・轉・合 + 答題解析與得分要點) — build 28 */
+.essay-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.essay-card-head h3{margin:0;display:flex;align-items:center;gap:8px}
+.essay-card-actions{display:flex;gap:8px;flex-wrap:wrap}
+.essay-action-btn{min-height:36px;padding:6px 12px;border:1px solid #c9c2ec;border-radius:10px;background:#ffffff;color:#3d358b;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:.15s ease}
+.essay-action-btn:hover{background:#ece9fa;border-color:#9e94df}
+.essay-disclaimer{margin:0 0 14px;padding:9px 12px;border-radius:10px;background:rgba(79,70,165,.08);color:#4b4663;font-size:12.5px;line-height:1.6}
+.essay-disclaimer-foot{margin:16px 0 0}
+.essay-model-body.collapsed{display:none}
+.essay-stages{display:grid;gap:14px}
+.essay-stage{background:#ffffff;border:1px solid #dad5f2;border-radius:14px;padding:16px 18px;box-shadow:0 2px 8px rgba(48,42,90,.05)}
+.essay-stage-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #ece9f6}
+.essay-stage-head strong{font-size:16px;line-height:1.4;color:#231f36}
+.essay-stage-badge{display:inline-grid;place-items:center;min-width:30px;height:30px;padding:0 8px;border-radius:9px;background:#4f46a5;color:#ffffff;font-size:14px;font-weight:850;flex:0 0 auto}
+.essay-stage-cheng .essay-stage-badge{background:#176d60}
+.essay-stage-zhuan .essay-stage-badge{background:#9a5b13}
+.essay-stage-he .essay-stage-badge{background:#5b4299}
+.essay-stage-text,.essay-legacy-text{white-space:pre-wrap;font-size:15.5px;line-height:1.88;letter-spacing:.02em;color:#221f2e}
+.essay-analysis-grid{display:grid;gap:14px}
+.essay-analysis-block{background:#ffffff;border:1px solid #dad5f2;border-radius:14px;padding:15px 18px}
+.essay-analysis-block h4{margin:0 0 10px;font-size:15.5px;line-height:1.4;color:#352e78;display:flex;align-items:center;gap:6px}
+.essay-analysis-block ul{margin:0;padding-left:20px;display:grid;gap:8px}
+.essay-analysis-block li{font-size:15px;line-height:1.78;letter-spacing:.015em;color:#262334}
+.essay-chip-list{display:flex;flex-wrap:wrap;gap:8px}
+.essay-concept-chip{display:inline-block;padding:6px 11px;border-radius:999px;background:#eeecfa;border:1px solid #cec8ee;color:#362e82;font-size:13.5px;font-weight:700;line-height:1.35}
+@media(max-width:600px){
+  .essay-stage,.essay-analysis-block{padding:14px}
+  .essay-stage-text,.essay-legacy-text{font-size:15.5px;line-height:1.85}
+  .essay-card-actions{width:100%}
+  .essay-action-btn{flex:1;text-align:center}
+}
+@media(prefers-color-scheme:dark){
+  .essay-answers .answer-box h3 span{background:#5b50b6;color:#ffffff}
+  .essay-action-btn{background:#2d2842;color:#eae6ff;border-color:#5b5282}
+  .essay-action-btn:hover{background:#3a3456;border-color:#897fc4}
+  .essay-disclaimer{background:rgba(169,160,255,.12);color:#d2cde2}
+  .essay-stage,.essay-analysis-block{background:#1b1828;border-color:#443d61;box-shadow:none}
+  .essay-stage-head{border-bottom-color:#352f4d}
+  .essay-stage-head strong{color:#f5f3fc}
+  .essay-stage-badge{background:#665cd6;color:#ffffff}
+  .essay-stage-cheng .essay-stage-badge{background:#1f7f70}
+  .essay-stage-zhuan .essay-stage-badge{background:#b36d1c}
+  .essay-stage-he .essay-stage-badge{background:#7658ba}
+  .essay-stage-text,.essay-legacy-text,.essay-analysis-block li{color:#f0edf8}
+  .essay-analysis-block h4{color:#ccc5ff}
+  .essay-concept-chip{background:#332d4c;border-color:#5f5686;color:#e0daff}
+}

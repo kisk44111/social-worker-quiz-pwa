@@ -1,15 +1,44 @@
 import importlib.util
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("validate_questions", "tools/validate_questions.py")
 validator = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(validator)
+
+gen_spec = importlib.util.spec_from_file_location("generate_essay_answers", "tools/generate_essay_answers.py")
+essay_gen = importlib.util.module_from_spec(gen_spec)
+gen_spec.loader.exec_module(essay_gen)
 
 
 def mc(identifier="2026-1-0301-M1", number=1):
     return {"id": identifier, "year": 2026, "session": 1, "subject": "社會工作", "number": number,
             "type": "multipleChoice", "prompt": "題目", "options": ["甲", "乙", "丙", "丁"], "answer": "A",
             "questionPDF": "source.pdf", "answerPDF": "answer.pdf", "explanation": "詳解"}
+
+
+def sample_essay(identifier="2026-1-0301-E1", number=1):
+    return {"id": identifier, "year": 2026, "session": 1, "subject": "社會工作", "number": number,
+            "type": "essay", "prompt": "試論述社工專業倫理兩難之處理原則。", "options": [], "answer": None,
+            "questionPDF": "source.pdf", "answerPDF": None, "explanation": "擬答方向", "referenceAnswer": "參考答案"}
+
+
+def valid_essay_guide():
+    return {
+        "modelAnswer": {
+            "qi": {"title": "破題與核心概念界定", "content": "社會工作倫理兩難源於多重價值與責任之衝突，作答首須界定專業倫理核心。"},
+            "cheng": {"title": "理論依據與法規政策剖析", "content": "可援引 Reamer 倫理決策步驟與 Lowenberg 及 Dolgoff 倫理原則篩檢架構分析。"},
+            "zhuan": {"title": "實務應用、困境與批判反思", "content": "於臺灣保護性業務實務中，須兼顧案主自決、保密界線、法定通報義務與督導支持。"},
+            "he": {"title": "總結與具體建議展望", "content": "綜上，應以倫理守則、法令規範與跨專業督導機制建構可檢視之專業責信。"},
+        },
+        "analysis": {
+            "focusAndTraps": ["聚焦價值衝突排序與決策流程", "避免僅憑個人道德直覺作答而未援引專業守則"],
+            "theoriesAndLaws": ["Reamer 倫理決策步驟", "Lowenberg & Dolgoff 倫理原則篩檢", "社會工作師倫理守則"],
+            "scoringRubric": ["【起】約 15%：明確界定倫理兩難與核心價值", "【承】約 35%：清楚鋪陳理論與法源", "【轉】約 35%：連結臺灣實務與限制", "【合】約 15%：提出具體配套"],
+        },
+    }
 
 
 class QuestionValidationTests(unittest.TestCase):
@@ -33,6 +62,70 @@ class QuestionValidationTests(unittest.TestCase):
     def test_essay_requires_reference_answer(self):
         question = mc("2026-1-0301-E1"); question.update({"type": "essay", "options": [], "answer": None}); question.pop("referenceAnswer", None)
         self.assertTrue(any("referenceAnswer" in error for error in validator.validate_questions([question])))
+
+    def test_structured_essay_guide_validation(self):
+        question = sample_essay()
+        question["essayGuide"] = valid_essay_guide()
+        self.assertEqual(validator.validate_questions([question]), [])
+
+        bad_stage = sample_essay()
+        bad_stage["essayGuide"] = valid_essay_guide()
+        bad_stage["essayGuide"]["modelAnswer"]["zhuan"]["content"] = "   "
+        self.assertTrue(any("essayGuide.modelAnswer.zhuan" in error for error in validator.validate_questions([bad_stage])))
+
+        bad_analysis = sample_essay()
+        bad_analysis["essayGuide"] = valid_essay_guide()
+        bad_analysis["essayGuide"]["analysis"]["theoriesAndLaws"] = []
+        self.assertTrue(any("essayGuide.analysis.theoriesAndLaws" in error for error in validator.validate_questions([bad_analysis])))
+
+        wrong_type = mc()
+        wrong_type["essayGuide"] = valid_essay_guide()
+        self.assertTrue(any("只有申論題可包含 essayGuide" in error for error in validator.validate_questions([wrong_type])))
+
+    def test_essay_generator_status_export_and_import(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            data_path = tmp_dir / "questions.json"
+            checkpoint_path = tmp_dir / ".checkpoint.json"
+            export_path = tmp_dir / "batch.md"
+            import_path = tmp_dir / "gemini-response.md"
+            data_path.write_text(json.dumps([sample_essay()], ensure_ascii=False), encoding="utf-8")
+
+            # Check --status report before import
+            report_before = essay_gen.format_status_report(json.loads(data_path.read_text(encoding="utf-8")))
+            self.assertIn("已完成 0 / 1 題", report_before)
+            self.assertIn("社會工作", report_before)
+            self.assertEqual(essay_gen.main(["--data", str(data_path), "--status"]), 0)
+
+            # Export batch Markdown task pack
+            rc = essay_gen.main(["--data", str(data_path), "--export-batch", "--limit", "1", "--out", str(export_path)])
+            self.assertEqual(rc, 0)
+            exported = export_path.read_text(encoding="utf-8")
+            self.assertIn("2026-1-0301-E1", exported)
+            self.assertIn("focusAndTraps", exported)
+
+            # Import Markdown-fenced JSON pasted from Gemini Pro
+            fenced = "以下為生成結果：\n```json\n" + json.dumps([{"id": "2026-1-0301-E1", **valid_essay_guide()}], ensure_ascii=False) + "\n```\n"
+            import_path.write_text(fenced, encoding="utf-8")
+
+            # Dry-run import validates without mutating questions.json
+            before = data_path.read_text(encoding="utf-8")
+            rc = essay_gen.main(["--data", str(data_path), "--checkpoint", str(checkpoint_path), "--import-json", str(import_path), "--dry-run"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(data_path.read_text(encoding="utf-8"), before)
+
+            # Real import validates and atomically writes questions.json + checkpoint
+            rc = essay_gen.main(["--data", str(data_path), "--checkpoint", str(checkpoint_path), "--import-json", str(import_path)])
+            self.assertEqual(rc, 0)
+            saved = json.loads(data_path.read_text(encoding="utf-8"))
+            self.assertIn("essayGuide", saved[0])
+            self.assertEqual(saved[0]["essayGuide"]["modelAnswer"]["qi"]["title"], "破題與核心概念界定")
+            self.assertEqual(saved[0]["aiContent"]["kind"], "nonOfficialEssayAnswer")
+            self.assertEqual(validator.validate_questions(saved), [])
+
+            # Check --status report after import
+            report_after = essay_gen.format_status_report(saved)
+            self.assertIn("已完成 1 / 1 題", report_after)
 
 
 if __name__ == "__main__":

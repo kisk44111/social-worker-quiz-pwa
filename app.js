@@ -117,10 +117,65 @@ function renderList(name,items){
   document.querySelectorAll('.question-link').forEach(b=>b.onclick=()=>{state.currentList=items;state.currentIndex=+b.dataset.i;state.selected=null;state.submitted=false;saveResume();push('question')});
   if($('#paperMode'))$('#paperMode').onclick=()=>{const mock={id:`paper-${Date.now()}`,subject:choices[0].subject,examType:examOf(choices[0]),questionIds:choices.map(q=>q.id),answers:{},flagged:[],startedAt:new Date().toISOString(),elapsedSeconds:0,paperTitle:name,mode:'historicalPaper'};state.mockExams.push(mock);state.activeMockId=mock.id;state.mockIndex=0;save();push('mock')};
 }
+const ESSAY_STAGES=[
+  ['qi','起','破題與核心概念界定'],
+  ['cheng','承','理論依據與法規政策剖析'],
+  ['zhuan','轉','實務應用、困境與批判反思'],
+  ['he','合','總結與具體建議展望']
+];
+function buildEssayCopyText(q){
+  const model=q.essayGuide?.modelAnswer;
+  if(model){
+    return ESSAY_STAGES.map(([key,badge,fallbackTitle])=>{
+      const part=model[key]||{};
+      const heading=part.title||fallbackTitle;
+      const body=(part.content||'').trim();
+      return body?`【${badge}｜${heading}】\n${body}`:'';
+    }).filter(Boolean).join('\n\n');
+  }
+  return (q.referenceAnswer||q.explanation||'').trim();
+}
+function renderEssayAnswersHtml(q){
+  const guide=q.essayGuide, model=guide?.modelAnswer, analysis=guide?.analysis;
+  const notice=q.aiContent?.limitations||'非考選部官方標準答案或評分依據；法規與實務請以考試當年度有效規定為準。';
+  const modelContent=model
+    ? `<div class="essay-stages">${ESSAY_STAGES.map(([key,badge,fallbackTitle])=>{
+        const part=model[key]||{};
+        return `<article class="essay-stage essay-stage-${key}"><header class="essay-stage-head"><span class="essay-stage-badge">${badge}</span><strong>${esc(part.title||fallbackTitle)}</strong></header><div class="essay-stage-text">${esc(part.content||'待補充')}</div></article>`;
+      }).join('')}</div>`
+    : `<div class="essay-legacy-text">${esc(q.referenceAnswer||'待補充')}</div>`;
+  const analysisContent=analysis
+    ? `<div class="essay-analysis-grid">
+        <section class="essay-analysis-block"><h4><span>🎯</span> 審題與破題關鍵</h4><ul>${(analysis.focusAndTraps||[]).map(item=>`<li>${esc(item)}</li>`).join('')}</ul></section>
+        <section class="essay-analysis-block"><h4><span>📚</span> 核心理論與法規清單</h4><div class="essay-chip-list">${(analysis.theoriesAndLaws||[]).map(item=>`<span class="essay-concept-chip">${esc(item)}</span>`).join('')}</div></section>
+        <section class="essay-analysis-block"><h4><span>✦</span> 架構與配分要點</h4><ul>${(analysis.scoringRubric||[]).map(item=>`<li>${esc(item)}</li>`).join('')}</ul></section>
+      </div>`
+    : `<div class="essay-legacy-text">${esc(q.explanation||'待補充')}</div>`;
+  return `<div class="essay-answers">
+    <section class="answer-box essay-model-card">
+      <div class="essay-card-head">
+        <h3><span>01</span> AI 參考擬答（起・承・轉・合）</h3>
+        <div class="essay-card-actions">
+          <button type="button" class="essay-action-btn" id="toggleEssayModel" aria-expanded="true">收合擬答</button>
+          <button type="button" class="essay-action-btn" id="copyEssayModel">複製擬答</button>
+        </div>
+      </div>
+      <p class="essay-disclaimer">${model?'結構化四段式參考擬答｜':'參考擬答（舊版格式）｜'}${esc(notice)}</p>
+      <div id="essayModelBody" class="essay-model-body">${modelContent}</div>
+    </section>
+    <section class="answer-box essay-analysis-card">
+      <div class="essay-card-head">
+        <h3><span>02</span> 答題解析與得分要點</h3>
+      </div>
+      ${analysisContent}
+      <p class="essay-disclaimer essay-disclaimer-foot">${esc(notice)}</p>
+    </section>
+  </div>`;
+}
 function renderEssayHtml(q,context){
   const existing=state.essayPractices.find(item=>item.questionId===q.id)||{id:`essay-${q.id}`,questionId:q.id,draft:'',elapsedSeconds:0,selfCheck:{}};
   state.essayStartedAt=Date.now();
-  return `${context}<div class="essay-layout"><article class="question-panel"><span class="eyebrow">申論題</span><p class="question-text">${esc(q.prompt)}</p><div class="essay-timer">作答計時：<strong id="essayTimer">${Math.floor(existing.elapsedSeconds/60)}:${String(existing.elapsedSeconds%60).padStart(2,'0')}</strong></div><label class="essay-label" for="essayDraft">我的擬答（自動暫存）</label><textarea id="essayDraft" class="essay-draft" placeholder="在此輸入擬答；內容只儲存在這台裝置。">${esc(existing.draft)}</textarea><div class="self-check"><strong>自評檢核</strong>${['回應題幹每個小問','說明概念或法規依據','提出可執行的實務作法','補充倫理、限制或配套','結論回扣題旨'].map((label,index)=>`<label><input type="checkbox" data-check="${index}" ${existing.selfCheck?.[index]?'checked':''}>${label}</label>`).join('')}</div><button class="primary" id="saveEssay">儲存本次練習</button></article><div class="essay-answers"><div class="answer-box"><h3><span>01</span> 擬答方向</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.explanation||'待補充')}</div></div><div class="answer-box reference-answer"><h3><span>02</span> 參考答案</h3><div style="white-space:pre-wrap;line-height:1.75">${esc(q.referenceAnswer||'待補充')}</div></div></div></div>`;
+  return `${context}<div class="essay-layout"><article class="question-panel"><span class="eyebrow">申論題</span><p class="question-text">${esc(q.prompt)}</p><div class="essay-timer">作答計時：<strong id="essayTimer">${Math.floor(existing.elapsedSeconds/60)}:${String(existing.elapsedSeconds%60).padStart(2,'0')}</strong></div><label class="essay-label" for="essayDraft">我的擬答（自動暫存）</label><textarea id="essayDraft" class="essay-draft" placeholder="在此輸入擬答；內容只儲存在這台裝置。">${esc(existing.draft)}</textarea><div class="self-check"><strong>自評檢核</strong>${['回應題幹每個小問','說明概念或法規依據','提出可執行的實務作法','補充倫理、限制或配套','結論回扣題旨'].map((label,index)=>`<label><input type="checkbox" data-check="${index}" ${existing.selfCheck?.[index]?'checked':''}>${label}</label>`).join('')}</div><button class="primary" id="saveEssay">儲存本次練習</button></article>${renderEssayAnswersHtml(q)}</div>`;
 }
 function saveEssayPractice(q,completed=false){
   const draft=$('#essayDraft')?.value||'', current=state.essayPractices.find(item=>item.questionId===q.id), selfCheck={};document.querySelectorAll('[data-check]').forEach(item=>selfCheck[item.dataset.check]=item.checked);
@@ -151,6 +206,21 @@ function renderQuestion(){
   if(q.type==='essay'){
     let draftTimer;$('#essayDraft').oninput=()=>{clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveEssayPractice(q),500)};
     $('#saveEssay').onclick=()=>{saveEssayPractice(q,true);$('#saveEssay').textContent='已儲存';};
+    if($('#toggleEssayModel'))$('#toggleEssayModel').onclick=()=>{
+      const body=$('#essayModelBody'),btn=$('#toggleEssayModel');
+      const collapsed=body.classList.toggle('collapsed');
+      btn.setAttribute('aria-expanded',String(!collapsed));
+      btn.textContent=collapsed?'展開擬答':'收合擬答';
+    };
+    if($('#copyEssayModel'))$('#copyEssayModel').onclick=async()=>{
+      const text=buildEssayCopyText(q),btn=$('#copyEssayModel');
+      if(!text)return;
+      try{
+        if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);
+        else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+        btn.textContent='已複製 ✓';setTimeout(()=>{if($('#copyEssayModel'))$('#copyEssayModel').textContent='複製擬答'},1800);
+      }catch(_){btn.textContent='複製失敗';setTimeout(()=>{if($('#copyEssayModel'))$('#copyEssayModel').textContent='複製擬答'},1800);}
+    };
     state.essayInterval=setInterval(()=>{if($('#essayTimer')){const current=state.essayPractices.find(item=>item.questionId===q.id);const seconds=(current?.elapsedSeconds||0)+Math.max(0,Math.floor((Date.now()-state.essayStartedAt)/1000));$('#essayTimer').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`}},1000);
   }
   bindQuestionTools(q);
