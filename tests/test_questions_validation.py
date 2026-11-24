@@ -154,6 +154,128 @@ class QuestionValidationTests(unittest.TestCase):
             exported_files = list(export_dir.glob("*.txt"))
             self.assertEqual(len(exported_files), 2)
 
+    def test_build_lecture_mp3_script_filename_and_dry_run(self):
+        from tools import build_lecture_mp3
+
+        essay = sample_essay("2021-1-0401-E1")
+        essay["year"] = 2021
+        essay["session"] = 1
+        essay["prompt"] = "試論述運用任務中心取向（Task-Centered Approach）提供服務，對社會\n工作責信（accountability）有何意義？（25 分）"
+        essay["essayGuide"] = valid_essay_guide()
+        essay["essayGuide"]["modelAnswer"]["qi"]["content"] = (
+            "增強權能（Empowerment，亦稱增權或充權）由 Lorraine Gutiérrez 提出，強調弱勢群體之無力感源於結構排斥。"
+        )
+        essay["essayGuide"]["modelAnswer"]["cheng"]["content"] = (
+            "茲分述如下：\n1. 個人層次（自我效能）：係指提升案主能力，並結合家暴保護（《家庭暴力防治法》）。\n"
+            "2. 制度層次：惟實務上仍須防範挑案現象。綜上，責信應回歸案主福祉。"
+        )
+
+        # PDF mid-word line-wrap repair & clean Taiwan professor spoken translation
+        cleaned_prompt = build_lecture_mp3.clean_lecture_text(essay["prompt"])
+        self.assertIn("社會工作責信", cleaned_prompt)
+        self.assertNotIn("Task-Centered", cleaned_prompt)
+        self.assertNotIn("25 分", cleaned_prompt)
+
+        spoken_qi = build_lecture_mp3.convert_to_lecturer_spoken_chinese(
+            essay["essayGuide"]["modelAnswer"]["qi"]["content"]
+        )
+        self.assertNotIn("Empowerment", spoken_qi)
+        self.assertIn("增權或充權", spoken_qi)
+        self.assertIn("Gutierrez", spoken_qi)
+        self.assertIn("的無力感", spoken_qi)
+
+        spoken_cheng = build_lecture_mp3.convert_to_lecturer_spoken_chinese(
+            essay["essayGuide"]["modelAnswer"]["cheng"]["content"]
+        )
+        self.assertIn("首先來看個人層次", spoken_cheng)
+        self.assertIn("再來是制度層次", spoken_cheng)
+        self.assertIn("指的就是", spoken_cheng)
+        self.assertIn("像是家庭暴力防治法", spoken_cheng)
+        self.assertIn("不過，", spoken_cheng)
+        self.assertIn("總結來說", spoken_cheng)
+        self.assertNotIn("第一個重點", spoken_cheng)
+        self.assertNotIn("茲分述如下", spoken_cheng)
+
+        # Clean Taiwan professor segmented structure (no cheesy rhyming slogan)
+        segments = build_lecture_mp3.build_lecture_segments(essay)
+        self.assertGreaterEqual(len(segments), 8)
+        self.assertTrue(any(seg["pauseAfterSec"] >= 0.85 for seg in segments))
+        script = build_lecture_mp3.build_lecture_script(essay)
+        self.assertIn("一百一十年第一次專技社工師", script)
+        self.assertIn("閱卷老師真正想看到的重點是什麼", script)
+        self.assertIn("第一段起的部分", script)
+        self.assertIn("接著進到第二段承", script)
+        self.assertIn("第三段轉", script)
+        self.assertIn("最後第四段合", script)
+        self.assertIn("閱卷給分關鍵字", script)
+        self.assertNotIn("考場記憶口訣", script)
+        self.assertNotRegex(script, r"[《》【】「」『』()（）*#]")
+
+        # Filename cleanup & collision handling
+        used: set[str] = set()
+        name1 = build_lecture_mp3.build_lecture_filename(1, essay, used_names=used)
+        self.assertTrue(name1.startswith("01-任務中心取向"))
+        self.assertTrue(name1.endswith(".mp3"))
+        self.assertNotRegex(name1, r'[\\/:*?"<>|\s]')
+        name2 = build_lecture_mp3.build_lecture_filename(1, essay, used_names=used)
+        self.assertNotEqual(name1, name2)
+
+        # Local offline MLX clone defaults, Documents output path, multi-worker bounds & atomic write
+        self.assertEqual(build_lecture_mp3.DEFAULT_ENGINE, "mlx-clone")
+        self.assertEqual(build_lecture_mp3.DEFAULT_MLX_MODEL, "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16")
+        self.assertEqual(
+            build_lecture_mp3.DEFAULT_OUTPUT_DIR,
+            Path.home() / "Documents" / "2027社工師國考申論名師有聲課",
+        )
+        self.assertEqual(build_lecture_mp3.DEFAULT_WORKERS, 2)
+        self.assertEqual(build_lecture_mp3.format_duration_eta(45), "45 秒")
+        self.assertEqual(build_lecture_mp3.format_duration_eta(125), "2 分 05 秒")
+        self.assertEqual(build_lecture_mp3.format_duration_eta(5040), "1 小時 24 分")
+        with self.assertRaises(ValueError):
+            build_lecture_mp3.assert_path_outside_repo(build_lecture_mp3.REPO_ROOT / "tw_teacher_erinome_ref.wav")
+        self.assertEqual(build_lecture_mp3.DEFAULT_VOICE, "zh-TW-HsiaoYuNeural")
+        self.assertEqual(build_lecture_mp3.resolve_voice_name("hsiaoyu"), "zh-TW-HsiaoYuNeural")
+        self.assertEqual(build_lecture_mp3.resolve_voice_name("hsiaochen"), "zh-TW-HsiaoChenNeural")
+        self.assertEqual(build_lecture_mp3.resolve_voice_name("yunjhe"), "zh-TW-YunJheNeural")
+
+        # Dry-run CLI with --output-dir, --workers validation, --question-id and atomic write
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            data_path = tmp_dir / "questions.json"
+            data_path.write_text(json.dumps([essay], ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(
+                build_lecture_mp3.main(["--questions", str(data_path), "--workers", "0", "--dry-run"]),
+                1,
+            )
+            self.assertEqual(
+                build_lecture_mp3.main(["--questions", str(data_path), "--workers", "5", "--dry-run"]),
+                1,
+            )
+            rc = build_lecture_mp3.main(
+                [
+                    "--questions",
+                    str(data_path),
+                    "--output-dir",
+                    str(tmp_dir / "docs_out"),
+                    "--workers",
+                    "3",
+                    "--question-id",
+                    "2021-1-0401-E1",
+                    "--single-out",
+                    str(tmp_dir / "audition.mp3"),
+                    "--dry-run",
+                ]
+            )
+            self.assertEqual(rc, 0)
+            self.assertFalse((tmp_dir / "audition.mp3").exists())
+
+            src = tmp_dir / "src.mp3"
+            dest = tmp_dir / "out" / "final.mp3"
+            src.write_bytes(b"ID3-test-payload")
+            build_lecture_mp3._write_icloud_safe_file(src, dest)
+            self.assertEqual(dest.read_bytes(), b"ID3-test-payload")
+            self.assertEqual(list(dest.parent.glob("*.tmp-*")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

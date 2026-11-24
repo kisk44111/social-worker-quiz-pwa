@@ -2,4 +2,10 @@
 .essay-answer-checkpoint.json
 .notebooklm-exports/
 .swq-notebooklm-profile/
+*.mp3
+*.wav
+*.m4a
+*.flac
+lecture-mp3/
+.swq-tts-ref/
 __pycache__/
