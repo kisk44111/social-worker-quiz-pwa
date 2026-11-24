@@ -1,40 +1,38 @@
 #!/usr/bin/env python3
 """
 本機 100% 離線申論有聲課製作工具：直接讀取 questions.json 全部 160 題申論題，
-預設透過 Apple Silicon MLX 零樣本聲音克隆模型（Qwen3-TTS-12Hz-1.7B-Base-bf16）
-搭配本機快取之「台灣社工系教授清爽知性 12 秒參考聲紋」，離線批次產出
-「道地台灣口音、清爽知性、平實自然不油膩」的國考申論解題 MP3 有聲書；
-亦保留免費 Microsoft edge-tts 作為備選引擎（--engine edge）。
+預設透過 Apple Silicon MLX 零樣本聲音克隆模型（Qwen3-TTS-12Hz-1.7B-Base-8bit）
+搭配本機快取之「台灣社工系教授清爽知性 12 秒參考聲紋」，以「低 GPU 發熱、單進程
+高頻寬效率＋記憶體常駐聲紋快取」模式，離線批次產出「道地台灣口音、清爽知性、平實自然
+不油膩」的國考申論解題 MP3 有聲書；亦保留免費 Microsoft edge-tts 作為備選引擎（--engine edge）。
 
 核心特色：
   1. 清爽知性台灣老師純口說改寫器：
      自動修復 PDF 斷行、移除所有條列編號（第一點／第二點）與生硬書面語（茲分述如下／
      係指／惟／綜上所述）及浮誇打油詩口訣，轉譯為台灣大學社工系教授錄製線上解題課
      的自然口說逐字稿（開場審題 → 起 → 承 → 轉 → 合 → 給分關鍵字平實總複習）。
-  2. 100% 本機離線零樣本聲音克隆（預設 --engine mlx-clone）：
-     使用 ~/.venvs/swq-mlx-tts 載入 mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16，
-     讀取 ~/.cache/swq-tts-ref/tw_teacher_erinome_ref.wav 與精確對應逐字稿執行
-     ICL（In-Context Learning）零樣本聲紋克隆，徹底消除大陸捲舌口音與表演式油膩感，
-     完全不受雲端 API 每日額度限制。
-  3. 專業音訊分段封裝與 32GB Apple Silicon 多進程平行加速：
-     支援 --workers（預設 2，可設 1～4）透過 ProcessPoolExecutor（spawn 模式）啟動多
-     進程 Worker，每個 Worker 僅於啟動時載入一次 Qwen3-TTS 常駐記憶體；搭配跨進程檔案
-     鎖與非隱藏暫存檔原子替換（os.replace），並即時回報 [已完成/總題數]、累計耗時與
-     預估剩餘時間（ETA）。每段約 70～165 字獨立合成、12ms 淡入淡出防爆音、一致響度
-     正規化、段落間插入 0.48s～0.85s 真實靜音停頓，經 ffmpeg 輸出 24kHz 單聲道 96kbps
-     MP3，預設寫入 ~/Documents/2027社工師國考申論名師有聲課/（0644 權限＋Spotlight 索引）。
+  2. 100% 本機離線 8-bit 高速低溫零樣本克隆（預設 --engine mlx-clone --workers 1）：
+     使用 ~/.venvs/swq-mlx-tts 載入 mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit，
+     權重頻寬搬運較 bf16 減半且免除多進程 GPU 佇列搶佔；啟動時即將全庫 160 題口語
+     講稿、參考音檔陣列及模型的 Speaker Embedding／ICL Reference Prompt 特徵預先運算
+     並常駐於 32GB 統一記憶體中，每題完成後自動釋放 Metal 快取並執行 --cooldown（預設
+     2.0 秒）溫控喘息，大幅降溫省電並穩定維持高速輸出。
+  3. 專業音訊分段封裝與斷點續跑安全機制：
+     支援 --workers（預設 1，可設 1～4）與跨進程 fcntl 檔案鎖、非隱藏暫存檔原子替換
+     （os.replace）及即時 [已完成/總題數]、累計耗時與預估剩餘時間（ETA）。每段約
+     70～165 字獨立合成、12ms 淡入淡出防爆音、一致響度正規化、段落間插入 0.48s～0.85s
+     真實靜音停頓，經 ffmpeg 輸出 24kHz 單聲道 96kbps MP3，預設寫入
+     ~/Documents/2027社工師國考申論名師有聲課/（0644 權限＋Spotlight 索引）。
 
 常用指令：
   # 預覽全部 7 科 160 題資料夾、檔名與清爽口語講稿結構（免載入模型）
   python3 tools/build_lecture_mp3.py --dry-run
 
-  # 以本機 M5 32GB 三進程平行離線生成全庫 160 題（自動略過已完成檔案，支援斷點續跑）
-  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 3
+  # 以低溫高速單進程 8-bit 模式離線生成全庫 160 題（自動略過已完成檔案，支援斷點續跑）
+  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 1 --engine mlx-clone
 
-  # 指定單題試聽輸出至自訂路徑
-  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py \\
-    --question-id 2021-1-0401-E2 \\
-    --single-out ~/Desktop/試聽-第2題-本機M5台灣老師克隆版.mp3 --overwrite
+  # 調整每題完成後 GPU 溫控喘息秒數（預設 2.0 秒）
+  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 1 --cooldown 3.0
 
   # 切換備用 edge-tts 雲端免費語音引擎
   ~/.venvs/swq-tts/bin/python tools/build_lecture_mp3.py --engine edge --limit 2
@@ -68,10 +66,11 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "2027社工師國考申論名�
 
 # 預設本機離線 MLX 零樣本克隆設定（存放於家目錄快取，嚴格排除於 Git 儲存庫之外）
 DEFAULT_ENGINE = "mlx-clone"
-DEFAULT_MLX_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
-DEFAULT_WORKERS = 2
+DEFAULT_MLX_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit"
+DEFAULT_WORKERS = 1
 MIN_WORKERS = 1
 MAX_WORKERS = 4
+DEFAULT_COOLDOWN_SEC = 2.0
 DEFAULT_LOCK_DIR = Path.home() / ".cache" / "swq-tts-locks"
 DEFAULT_REF_DIR = Path.home() / ".cache" / "swq-tts-ref"
 DEFAULT_REF_AUDIO = DEFAULT_REF_DIR / "tw_teacher_erinome_ref.wav"
@@ -904,6 +903,87 @@ def _synthesize_task_mlx_clone(
     return total_dur, time.time() - t0
 
 
+def install_in_memory_prompt_cache(
+    model: Any,
+    ref_audio_mx: Any,
+    ref_text: str,
+    language: str = "chinese",
+) -> dict[str, bool]:
+    """
+    記憶體常駐聲紋／Prompt 特徵預快取：
+    1. 預先計算並快取參考音檔的 Speaker Embedding（ECAPA-TDNN x-vector），
+       避免每題數十個分段重複執行 GPU 聲紋編碼。
+    2. 預先暖機並常駐模型的 ICL Reference Prompt 快取（ref_codes / ref_text_ids）。
+    """
+    try:
+        import mlx.core as mx
+    except ImportError:
+        mx = None
+
+    def _fingerprint(arr: Any) -> tuple[int, float]:
+        size = int(arr.size) if hasattr(arr, "size") else len(arr)
+        total = float(arr.sum())
+        return (size, round(total, 5))
+
+    ref_fp = _fingerprint(ref_audio_mx)
+    speaker_cached = False
+    icl_cached = False
+
+    # 1. 快取 Speaker Embedding（原先 mlx_audio 每段皆會重算 speaker_encoder）
+    if getattr(model, "speaker_encoder", None) is not None and hasattr(model, "extract_speaker_embedding"):
+        orig_extract = model.extract_speaker_embedding
+        cached_spk = orig_extract(ref_audio_mx)
+        if mx is not None:
+            mx.eval(cached_spk)
+
+        def _cached_extract_speaker_embedding(audio: Any) -> Any:
+            try:
+                if _fingerprint(audio) == ref_fp:
+                    return cached_spk
+            except Exception:
+                pass
+            return orig_extract(audio)
+
+        model.extract_speaker_embedding = _cached_extract_speaker_embedding
+        speaker_cached = True
+
+    # 2. 預先暖機 ICL Prompt（編碼 ref_codes 與 ref_text_ids 常駐 model._icl_cache）
+    if hasattr(model, "_prepare_icl_generation_inputs"):
+        try:
+            _ = model._prepare_icl_generation_inputs(
+                text="暖機測試。",
+                ref_audio=ref_audio_mx,
+                ref_text=ref_text,
+                language=language,
+            )
+            icl_cache = getattr(model, "_icl_cache", None)
+            if isinstance(icl_cache, dict) and len(icl_cache) > 0:
+                if mx is not None:
+                    for val in icl_cache.values():
+                        if isinstance(val, tuple):
+                            mx.eval(*val)
+                icl_cached = True
+        except Exception:
+            pass
+
+    if mx is not None:
+        mx.clear_cache()
+
+    return {"speakerCached": speaker_cached, "iclPromptCached": icl_cached}
+
+
+def _apply_thermal_cooldown(cooldown_sec: float) -> None:
+    """每題結束後釋放 MLX Metal 快取並短暫休眠，降低無風扇筆電 GPU 溫度與耗電。"""
+    try:
+        import mlx.core as mx
+
+        mx.clear_cache()
+    except ImportError:
+        pass
+    if cooldown_sec > 0:
+        time.sleep(cooldown_sec)
+
+
 # ProcessPoolExecutor 專屬 Worker 狀態（每個子進程僅於啟動時載入一次 Qwen3-TTS 模型常駐記憶體）
 _MLX_WORKER_STATE: dict[str, Any] = {}
 
@@ -915,6 +995,7 @@ def _mlx_worker_init(
     temperature: float,
     top_p: float,
     repetition_penalty: float,
+    cooldown: float,
 ) -> None:
     from mlx_audio.tts.utils import load_model
     from mlx_audio.utils import load_audio
@@ -924,6 +1005,7 @@ def _mlx_worker_init(
     model = load_model(model_id)
     sr = int(getattr(model, "sample_rate", 24000))
     ref_audio_mx = load_audio(ref_audio_str, sample_rate=sr)
+    cache_info = install_in_memory_prompt_cache(model, ref_audio_mx, ref_text, language="chinese")
     _MLX_WORKER_STATE.clear()
     _MLX_WORKER_STATE.update(
         {
@@ -935,9 +1017,14 @@ def _mlx_worker_init(
             "temperature": temperature,
             "top_p": top_p,
             "repetition_penalty": repetition_penalty,
+            "cooldown": cooldown,
         }
     )
-    print(f"[Worker PID {pid}] ✓ 模型常駐載入完成（耗時 {time.time() - t0:.1f}s｜{sr}Hz）", flush=True)
+    print(
+        f"[Worker PID {pid}] ✓ 模型與記憶體聲紋快取就緒（耗時 {time.time() - t0:.1f}s｜{sr}Hz｜"
+        f"SpeakerCache={cache_info['speakerCached']}｜ICLCache={cache_info['iclPromptCached']}）",
+        flush=True,
+    )
 
 
 def _mlx_worker_run_task(payload: dict[str, Any]) -> dict[str, Any]:
@@ -983,6 +1070,7 @@ def _mlx_worker_run_task(payload: dict[str, Any]) -> dict[str, Any]:
                 verbose_segments=False,
             )
             size_mb = out_path.stat().st_size / (1024 * 1024)
+            _apply_thermal_cooldown(float(state.get("cooldown", DEFAULT_COOLDOWN_SEC)))
             return {
                 "id": payload["id"],
                 "relLabel": rel_label,
@@ -1026,6 +1114,7 @@ def _run_batch_mlx_clone(
     top_p: float,
     repetition_penalty: float,
     workers: int = DEFAULT_WORKERS,
+    cooldown: float = DEFAULT_COOLDOWN_SEC,
 ) -> tuple[int, int, int]:
     assert_path_outside_repo(ref_audio_path, "參考聲紋 WAV")
     if not ref_audio_path.exists() or ref_audio_path.stat().st_size == 0:
@@ -1043,6 +1132,9 @@ def _run_batch_mlx_clone(
         print("⚠ 未偵測到 ffmpeg，將直接輸出 WAV 檔案。", flush=True)
 
     total = len(tasks)
+    total_chars = sum(t["charCount"] for t in tasks)
+    print(f"✓ 已預先將全庫 {total} 題口語講稿（共 {total_chars:,} 字）常駐記憶體快取。", flush=True)
+
     pending: list[dict[str, Any]] = []
     skipped = 0
 
@@ -1074,11 +1166,20 @@ def _run_batch_mlx_clone(
         from mlx_audio.utils import load_audio
 
         t_load = time.time()
-        print(f"載入本機 MLX 零樣本聲音克隆模型：{model_id}（單進程模式）...", flush=True)
+        print(
+            f"載入本機 MLX 零樣本聲音克隆模型：{model_id}（單進程低溫高速模式｜每題冷卻 {cooldown:.1f}s）...",
+            flush=True,
+        )
         model = load_model(model_id)
         sr = int(getattr(model, "sample_rate", 24000))
         ref_audio_mx = load_audio(str(ref_audio_path), sample_rate=sr)
-        print(f"✓ 模型載入完成（耗時 {time.time() - t_load:.1f}s｜取樣率 {sr}Hz｜參考聲紋：{ref_audio_path.name}）", flush=True)
+        cache_info = install_in_memory_prompt_cache(model, ref_audio_mx, ref_text, language="chinese")
+        print(
+            f"✓ 模型與記憶體聲紋快取就緒（耗時 {time.time() - t_load:.1f}s｜取樣率 {sr}Hz｜"
+            f"參考聲紋：{ref_audio_path.name}｜SpeakerCache={cache_info['speakerCached']}｜"
+            f"ICLCache={cache_info['iclPromptCached']}）",
+            flush=True,
+        )
 
         work_t0 = time.time()
         for idx, task in enumerate(pending, start=1):
@@ -1119,15 +1220,18 @@ def _run_batch_mlx_clone(
                         f"預估剩餘 ETA {eta_str} → {rel_label}",
                         flush=True,
                     )
+                    if remaining > 0:
+                        _apply_thermal_cooldown(cooldown)
                 except Exception as exc:
                     failed += 1
                     print(f"  ✗ 失敗：{task['id']}（{rel_label}）→ {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+                    _apply_thermal_cooldown(cooldown)
 
         return generated, skipped, failed
 
-    # 多進程平行模式（spawn + 每 Worker 僅載入一次模型常駐記憶體）
+    # 多進程平行模式（spawn + 每 Worker 僅載入一次模型與記憶體聲紋快取）
     print(
-        f"準備啟動 {effective_workers} 個獨立 MLX Worker 進程平行生成（已略過 {skipped} 支，本次待生成 {pending_total} 支 / 總計 {total} 支）...",
+        f"準備啟動 {effective_workers} 個獨立 MLX Worker 進程平行生成（已略過 {skipped} 支，本次待生成 {pending_total} 支 / 總計 {total} 支｜冷卻 {cooldown:.1f}s）...",
         flush=True,
     )
     _ensure_hf_model_cached(model_id)
@@ -1153,7 +1257,7 @@ def _run_batch_mlx_clone(
         max_workers=effective_workers,
         mp_context=mp_ctx,
         initializer=_mlx_worker_init,
-        initargs=(model_id, str(ref_audio_path), ref_text, temperature, top_p, repetition_penalty),
+        initargs=(model_id, str(ref_audio_path), ref_text, temperature, top_p, repetition_penalty, cooldown),
     ) as executor:
         futures = [executor.submit(_mlx_worker_run_task, p) for p in payloads]
         for fut in as_completed(futures):
@@ -1432,7 +1536,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--workers",
         type=int,
         default=DEFAULT_WORKERS,
-        help=f"MLX 多進程平行 Worker 數（預設：{DEFAULT_WORKERS}，範圍 {MIN_WORKERS}～{MAX_WORKERS}；32GB 統一記憶體建議 2～3）",
+        help=f"MLX Worker 進程數（預設：{DEFAULT_WORKERS} 單進程低溫高速免 GPU 搶佔，範圍 {MIN_WORKERS}～{MAX_WORKERS}）",
+    )
+    parser.add_argument(
+        "--cooldown",
+        type=float,
+        default=DEFAULT_COOLDOWN_SEC,
+        help=f"每題完成後的 GPU 溫控散熱冷卻秒數（預設：{DEFAULT_COOLDOWN_SEC} 秒，設 0 可關閉）",
     )
     parser.add_argument(
         "--single-out",
@@ -1554,6 +1664,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"--workers 必須介於 {MIN_WORKERS} 到 {MAX_WORKERS} 之間（目前為 {args.workers}）。", file=sys.stderr)
         return 1
 
+    if args.cooldown < 0:
+        print(f"--cooldown 不可為負數（目前為 {args.cooldown}）。", file=sys.stderr)
+        return 1
+
     questions_path = args.questions.expanduser().resolve()
     if not questions_path.exists():
         print(f"找不到題庫檔案：{questions_path}", file=sys.stderr)
@@ -1582,7 +1696,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         total_chars = sum(t["charCount"] for t in tasks)
         engine_desc = (
-            f"mlx-clone（{args.mlx_model}｜workers={args.workers}｜參考聲紋：{args.ref_audio}）"
+            f"mlx-clone（{args.mlx_model}｜workers={args.workers}｜cooldown={args.cooldown:.1f}s｜參考聲紋：{args.ref_audio}）"
             if args.engine == "mlx-clone"
             else f"edge（{resolve_voice_name(args.voice)}｜語速：{args.rate}）"
         )
@@ -1604,7 +1718,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if importlib.util.find_spec("mlx_audio") is None:
             print("尚未安裝 mlx-audio，請改用已建置之 Apple Silicon 虛擬環境執行：", file=sys.stderr)
-            print("  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 2", file=sys.stderr)
+            print("  ~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 1", file=sys.stderr)
             print("（或安裝：python3 -m venv ~/.venvs/swq-mlx-tts && ~/.venvs/swq-mlx-tts/bin/pip install mlx-audio soundfile）", file=sys.stderr)
             return 2
 
@@ -1612,7 +1726,7 @@ def main(argv: list[str] | None = None) -> int:
         ref_text = resolve_ref_text(args.ref_text, args.ref_text_file)
         print(
             f"開始本機 100% 離線零樣本聲音克隆｜模型：{args.mlx_model}｜"
-            f"Workers：{args.workers}｜輸出目錄：{out_dir}｜共 {len(tasks)} 題",
+            f"Workers：{args.workers}｜冷卻：{args.cooldown:.1f}s｜輸出目錄：{out_dir}｜共 {len(tasks)} 題",
             flush=True,
         )
         generated, skipped, failed = _run_batch_mlx_clone(
@@ -1626,6 +1740,7 @@ def main(argv: list[str] | None = None) -> int:
             top_p=args.top_p,
             repetition_penalty=args.repetition_penalty,
             workers=args.workers,
+            cooldown=args.cooldown,
         )
         print(
             f"全部完成！本次本機離線產出 {generated} 支 MP3、略過已存在 {skipped} 支、失敗 {failed} 支。"

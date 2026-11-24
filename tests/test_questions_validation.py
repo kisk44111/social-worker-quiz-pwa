@@ -220,14 +220,15 @@ class QuestionValidationTests(unittest.TestCase):
         name2 = build_lecture_mp3.build_lecture_filename(1, essay, used_names=used)
         self.assertNotEqual(name1, name2)
 
-        # Local offline MLX clone defaults, Documents output path, multi-worker bounds & atomic write
+        # Local offline MLX clone defaults (8-bit, single-worker low-thermal, cooldown, in-memory prompt cache)
         self.assertEqual(build_lecture_mp3.DEFAULT_ENGINE, "mlx-clone")
-        self.assertEqual(build_lecture_mp3.DEFAULT_MLX_MODEL, "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16")
+        self.assertEqual(build_lecture_mp3.DEFAULT_MLX_MODEL, "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit")
         self.assertEqual(
             build_lecture_mp3.DEFAULT_OUTPUT_DIR,
             Path.home() / "Documents" / "2027社工師國考申論名師有聲課",
         )
-        self.assertEqual(build_lecture_mp3.DEFAULT_WORKERS, 2)
+        self.assertEqual(build_lecture_mp3.DEFAULT_WORKERS, 1)
+        self.assertEqual(build_lecture_mp3.DEFAULT_COOLDOWN_SEC, 2.0)
         self.assertEqual(build_lecture_mp3.format_duration_eta(45), "45 秒")
         self.assertEqual(build_lecture_mp3.format_duration_eta(125), "2 分 05 秒")
         self.assertEqual(build_lecture_mp3.format_duration_eta(5040), "1 小時 24 分")
@@ -238,7 +239,36 @@ class QuestionValidationTests(unittest.TestCase):
         self.assertEqual(build_lecture_mp3.resolve_voice_name("hsiaochen"), "zh-TW-HsiaoChenNeural")
         self.assertEqual(build_lecture_mp3.resolve_voice_name("yunjhe"), "zh-TW-YunJheNeural")
 
-        # Dry-run CLI with --output-dir, --workers validation, --question-id and atomic write
+        # In-memory speaker & ICL prompt cache avoids recomputing speaker embedding per segment
+        class _FakeAudio:
+            size = 4
+            def sum(self):
+                return 1.5
+
+        class _FakeModel:
+            speaker_encoder = object()
+            def __init__(self):
+                self.spk_calls = 0
+                self._icl_cache = {}
+            def extract_speaker_embedding(self, audio):
+                self.spk_calls += 1
+                return ("spk-vec", audio.size)
+            def _prepare_icl_generation_inputs(self, text, ref_audio, ref_text, language="auto"):
+                self._icl_cache[(ref_text, ref_audio.size)] = ("codes", "ids")
+                return ("e", "t", "p", "c")
+
+        fake_model = _FakeModel()
+        fake_audio = _FakeAudio()
+        cache_info = build_lecture_mp3.install_in_memory_prompt_cache(fake_model, fake_audio, "參考逐字稿")
+        self.assertTrue(cache_info["speakerCached"])
+        self.assertTrue(cache_info["iclPromptCached"])
+        self.assertEqual(fake_model.spk_calls, 1)
+        # Subsequent segment calls hit RAM cache without invoking speaker encoder again
+        self.assertEqual(fake_model.extract_speaker_embedding(fake_audio), ("spk-vec", 4))
+        self.assertEqual(fake_model.extract_speaker_embedding(fake_audio), ("spk-vec", 4))
+        self.assertEqual(fake_model.spk_calls, 1)
+
+        # Dry-run CLI with --output-dir, --workers/--cooldown validation, --question-id and atomic write
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             data_path = tmp_dir / "questions.json"
@@ -251,6 +281,10 @@ class QuestionValidationTests(unittest.TestCase):
                 build_lecture_mp3.main(["--questions", str(data_path), "--workers", "5", "--dry-run"]),
                 1,
             )
+            self.assertEqual(
+                build_lecture_mp3.main(["--questions", str(data_path), "--cooldown", "-1", "--dry-run"]),
+                1,
+            )
             rc = build_lecture_mp3.main(
                 [
                     "--questions",
@@ -258,7 +292,9 @@ class QuestionValidationTests(unittest.TestCase):
                     "--output-dir",
                     str(tmp_dir / "docs_out"),
                     "--workers",
-                    "3",
+                    "1",
+                    "--cooldown",
+                    "2.5",
                     "--question-id",
                     "2021-1-0401-E1",
                     "--single-out",

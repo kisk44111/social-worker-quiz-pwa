@@ -206,7 +206,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 | `tools/generate_essay_answers.py` | 零付費 API、零本機模型依賴之申論題離線批次工具：支援 `--status`（盤點各科進度）、`--export-batch`（匯出標準化題組任務包供 Gemini／Antigravity 撰寫）與 `--import-json`（含 `--dry-run`、逐題結構檢核、同步 `referenceAnswer`/`explanation`/`aiContent`、執行全庫 `validate_questions` 與同目錄暫存檔原子替換 `os.replace`）；進度檔 `.essay-answer-checkpoint.json` 已加入 `.gitignore`。 |
 | `tools/generate_content_mc_explanations.py` | 以 OpenRouter API 批次產生選擇題內容導向解析；已強化金鑰與寫入防護，屬離線維運工具。 |
 | `tools/sync_notebooklm.py` | 本機 NotebookLM 自動化同步與有聲書講稿工具：讀取 160 題申論按 7 科組裝自然口語講稿，支援 `--dry-run` 預覽、`--export-only` 離線輸出，以及以家目錄獨立 Chrome Profile（`~/.cache/swq-notebooklm-profile`，嚴禁置於 Git 儲存庫內）透過 Playwright 自動匯入 NotebookLM 並可選 `--generate-audio`。 |
-| `tools/build_lecture_mp3.py` | 本機 100% 離線申論有聲課批次製作工具：預設透過 Apple Silicon MLX 零樣本聲音克隆模型（`mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16`，獨立 venv `~/.venvs/swq-mlx-tts`）搭配家目錄快取之 12 秒台灣老師純淨參考聲紋（`~/.cache/swq-tts-ref/tw_teacher_erinome_ref.wav`＋精確逐字稿，嚴格排除於 Git 儲存庫外），將全庫 160 題書面擬答轉譯為「道地台灣口音、清爽知性、平實自然不油膩」的大學社工系教授純口說逐字稿（零條列書面語、零浮誇打油詩口訣）；支援 `--workers`（預設 `2`，範圍 `1～4`，採 `ProcessPoolExecutor` `spawn` 多進程讓每個 Worker 常駐一次模型平行加速）、跨進程 `fcntl` 檔案鎖、非隱藏暫存檔原子替換（`os.replace`）與即時 `[已完成/總題數]`／ETA 進度顯示，經 `ffmpeg` 輸出 24kHz 單聲道 96kbps MP3（亦保留 `--engine edge` 免費雲端備選模式）；預設輸出至 `~/Documents/2027社工師國考申論名師有聲課/`（7 科資料夾、0644 權限、支援 `--output-dir`／`--out-dir`，`.gitignore` 已全面排除 `*.mp3`/`*.wav`/`.swq-tts-ref/`）。 |
+| `tools/build_lecture_mp3.py` | 本機 100% 離線申論有聲課批次製作工具：預設透過 Apple Silicon MLX 8-bit 零樣本聲音克隆模型（`mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit`，獨立 venv `~/.venvs/swq-mlx-tts`）搭配家目錄快取之 12 秒台灣老師純淨參考聲紋（`~/.cache/swq-tts-ref/tw_teacher_erinome_ref.wav`＋精確逐字稿，嚴格排除於 Git 儲存庫外），將全庫 160 題書面擬答轉譯為「道地台灣口音、清爽知性、平實自然不油膩」的大學社工系教授純口說逐字稿（零條列書面語、零浮誇打油詩口訣）；採「低 GPU 發熱、單進程高頻寬＋記憶體常駐快取」架構（預設 `--workers 1` 免除 GPU 搶佔、啟動時將全庫講稿與 Speaker／ICL Prompt 特徵常駐 32GB 記憶體避免逐段重算、每題完成自動釋放 Metal 快取並執行 `--cooldown` 預設 `2.0` 秒溫控冷卻，亦支援 `--workers 1～4`），搭配跨進程 `fcntl` 檔案鎖、非隱藏暫存檔原子替換（`os.replace`）與即時 `[已完成/總題數]`／ETA 進度顯示，經 `ffmpeg` 輸出 24kHz 單聲道 96kbps MP3（亦保留 `--engine edge` 備選模式）；預設輸出至 `~/Documents/2027社工師國考申論名師有聲課/`（7 科資料夾、0644 權限、支援 `--output-dir`／`--out-dir`，`.gitignore` 已全面排除 `*.mp3`/`*.wav`/`.swq-tts-ref/`）。 |
 | `tools/rebuild_mc_explanations.py` | 規則式重建選擇題解析；目前文字含「考選部標準答案」導向，若重跑可能覆蓋現有較佳內容，需先人工審查 diff。 |
 
 ---
@@ -623,9 +623,9 @@ python3 tools/generate_essay_answers.py --status
 # 預覽 NotebookLM 7 科申論口語講稿結構（不啟動瀏覽器）
 python3 tools/sync_notebooklm.py --dry-run
 
-# 預覽或以本機 Apple Silicon MLX 零樣本台灣老師聲紋克隆多進程離線生成申論有聲課 MP3
+# 預覽或以本機 Apple Silicon MLX 8-bit 低溫高速單進程模式離線生成申論有聲課 MP3
 python3 tools/build_lecture_mp3.py --dry-run
-~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 3
+~/.venvs/swq-mlx-tts/bin/python tools/build_lecture_mp3.py --workers 1 --engine mlx-clone
 # 備用免費 edge-tts 引擎
 ~/.venvs/swq-tts/bin/python tools/build_lecture_mp3.py --engine edge --limit 2
 
