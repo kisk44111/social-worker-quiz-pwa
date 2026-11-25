@@ -237,18 +237,36 @@ test('extractDriveFileId, buildDriveAudioUrls, resolveEssayAudioEntry, formatAud
   assert.equal(urls[0], 'https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOpQr_12');
   assert.equal(urls[1], 'https://docs.google.com/uc?export=open&id=1AbCdEfGhIjKlMnOpQr_12');
 
+  const apiUrls = tools.buildDriveAudioUrls('1AbCdEfGhIjKlMnOpQr_12', 'AIzaTestKey123456');
+  assert.equal(apiUrls.length, 4);
+  assert.equal(apiUrls[0], 'https://www.googleapis.com/drive/v3/files/1AbCdEfGhIjKlMnOpQr_12?alt=media&key=AIzaTestKey123456');
+
   const manifest = {
     version: 1,
+    driveApiKey: 'AIzaManifestKey999',
     items: {
-      '2021-1-0401-E1': { fileId: '1AbCdEfGhIjKlMnOpQr_12', title: '01-任務中心取向', subject: '社會工作' },
-      '2021-1-0401-E2': { fileId: '', title: '02-新住民', subject: '社會工作' }
+      '2021-1-0401-E1': {
+        directUrl: 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3',
+        fileId: '1AbCdEfGhIjKlMnOpQr_12',
+        title: '01-任務中心取向',
+        subject: '社會工作'
+      },
+      '2021-1-0401-E2': { fileId: '1ZyXwVuTsRqPoNmLkJi_34', title: '02-新住民', subject: '社會工作' },
+      '2021-1-0401-E3': { fileId: '', title: '03-未綁定', subject: '社會工作' }
     }
   };
-  const resolved = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E1');
-  assert.ok(resolved);
-  assert.equal(resolved.fileId, '1AbCdEfGhIjKlMnOpQr_12');
-  assert.equal(resolved.urls[0], 'https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOpQr_12');
-  assert.equal(tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E2'), null);
+  const resolvedCdn = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E1');
+  assert.ok(resolvedCdn);
+  assert.equal(resolvedCdn.sourceKind, 'cdn');
+  assert.equal(resolvedCdn.urls[0], 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3');
+  assert.equal(resolvedCdn.urls[1], 'https://www.googleapis.com/drive/v3/files/1AbCdEfGhIjKlMnOpQr_12?alt=media&key=AIzaManifestKey999');
+
+  const resolvedApi = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E2');
+  assert.ok(resolvedApi);
+  assert.equal(resolvedApi.sourceKind, 'driveApi');
+  assert.equal(resolvedApi.urls[0], 'https://www.googleapis.com/drive/v3/files/1ZyXwVuTsRqPoNmLkJi_34?alt=media&key=AIzaManifestKey999');
+
+  assert.equal(tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E3'), null);
   assert.equal(tools.resolveEssayAudioEntry(manifest, 'missing-id'), null);
 
   assert.equal(tools.formatAudioTime(0), '0:00');

@@ -11,7 +11,7 @@ const state = {
   favorites: new Set(), wrong: new Set(), answered: 0, correct: 0, attempts: [], reviews: [], mockExams: [], essayPractices: [], resume: null, plan: {weeklyGoal:120,startDate:null}, notes:{}, tags:{}, customTags:[], errataNotes:{}, filters:{},
   selected: null, submitted: false, examType: 'socialWorker', activeMockId: null, mockIndex: 0, essayStartedAt: null, essayInterval: null,
   essayBlindMode: false, essayRevealedStages: new Set(), essayLastQuestionId: null,
-  essaySpeech: { status: 'idle', mode: 'tts', rate: 1, continuous: loadPreferredAutoNext(), voiceName: loadPreferredVoiceName(), activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null, pauseTimer: null, audioEntry: null, audioUrls: [], audioUrlIndex: 0, currentTime: 0, duration: 0, seeking: false }
+  essaySpeech: { status: 'idle', mode: 'tts', rate: 1, continuous: loadPreferredAutoNext(), voiceName: loadPreferredVoiceName(), activeSegment: null, activeLabel: '', statusNote: '', mp3Failed: false, chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null, pauseTimer: null, audioEntry: null, audioUrls: [], audioUrlIndex: 0, currentTime: 0, duration: 0, seeking: false }
 };
 const socialSubjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
 const publicSubjects = ['社會福利政策與法規','社會工作實務'];
@@ -276,12 +276,16 @@ function handleLectureAudioError(){
       return;
     }
   }
-  // All Google Drive stream URLs failed -> seamlessly degrade to built-in Web Speech TTS
-  if(isSpeechSupported()){
-    startTtsEssaySpeech(cur,'雲端 MP3 暫時無法載入（可能離線或權限未設公開），已自動切換內建語音朗讀');
-  }else{
-    stopEssaySpeech('雲端 MP3 無法載入，請確認網路連線或 Google Drive 檔案權限');
-  }
+  // All MP3 stream URLs failed -> show clear error + one-click TTS fallback button (never hang in loading state)
+  stopLectureAudioOnly();
+  updateEssayMediaSession(null,'none');
+  sp.status='idle';
+  sp.mode='tts';
+  sp.mp3Failed=true;
+  sp.statusNote=navigator.onLine===false
+    ? '目前離線無法載入雲端 MP3，請點下方按鈕改用內建語音朗讀'
+    : '雲端 MP3 全部串流線路載入失敗（可能網路受限或來源暫時異常），可點下方按鈕改用內建語音朗讀';
+  syncEssaySpeechUI(false);
 }
 function handleLectureAudioEnded(){
   const sp=state.essaySpeech;
@@ -394,9 +398,13 @@ function syncEssaySpeechUI(scrollActive=false){
     else if(isPaused&&sp.mode==='mp3')statusEl.textContent=`⏸ 已暫停於 ${formatAudioTimeText(sp.currentTime)} / ${formatAudioTimeText(sp.duration)}`;
     else if(isPlaying&&sp.activeLabel)statusEl.textContent=`▶ 正在朗讀：${sp.activeLabel}（${formatRateLabel(sp.rate)}）`;
     else if(isPaused&&sp.activeLabel)statusEl.textContent=`⏸ 已暫停於：${sp.activeLabel}`;
-    else if(mp3Entry)statusEl.textContent='已連結 Google 雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題';
+    else if(mp3Entry)statusEl.textContent=mp3Entry.sourceKind==='cdn'
+      ? '已連結永久高速 CDN 名師有聲課 MP3，鎖屏放口袋可自動連播下一題'
+      : '已連結雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題';
     else statusEl.textContent='依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單';
   }
+  const fallbackBtn=$('#essayUseTtsFallback');
+  if(fallbackBtn)fallbackBtn.classList.toggle('hidden',!(sp.mp3Failed&&isSpeechSupported()));
   syncEssayAudioProgressUI();
   let activeEl=null;
   document.querySelectorAll('[data-speech-segment]').forEach(el=>{
@@ -565,6 +573,7 @@ function stopEssaySpeech(note=''){
   sp.activeSegment=null;
   sp.activeLabel='';
   sp.statusNote=note;
+  sp.mp3Failed=false;
   sp.chunks=[];
   sp.chunkIndex=0;
   sp.questionId=null;
@@ -674,8 +683,9 @@ function startMp3EssayAudio(q,entry){
   sp.activeLabel='';
   sp.chunks=[];
   sp.chunkIndex=0;
+  sp.mp3Failed=false;
   sp.status='playing';
-  sp.statusNote='正在載入 Google 雲端名師有聲課 MP3⋯';
+  sp.statusNote=entry.sourceKind==='cdn'?'正在載入高速名師有聲課 MP3⋯':'正在載入雲端名師有聲課 MP3⋯';
   lectureAudioSwitching=true;
   el.src=entry.urls[0];
   el.playbackRate=sp.rate;
@@ -714,6 +724,7 @@ function startTtsEssaySpeech(q,fallbackNote=''){
   sp.chunkIndex=0;
   sp.activeSegment=null;
   sp.activeLabel='';
+  sp.mp3Failed=false;
   sp.statusNote=fallbackNote;
   sp.status='playing';
   speakCurrentEssayChunk(q);
@@ -969,7 +980,10 @@ function renderEssaySprintBarHtml(q){
       ${progressBarHtml}
       <div class="essay-commute-row">
         <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🔁 自動連播下一題（iPhone 鎖屏無縫續播）</span></label>
-        <span id="essaySpeechStatus" class="speech-status" aria-live="polite">${mp3Entry?'已連結 Google 雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題':'依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單'}</span>
+        <div class="essay-status-wrap">
+          <span id="essaySpeechStatus" class="speech-status" aria-live="polite">${mp3Entry?(mp3Entry.sourceKind==='cdn'?'已連結永久高速 CDN 名師有聲課 MP3，鎖屏放口袋可自動連播下一題':'已連結雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題'):'依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單'}</span>
+          ${speechOk?`<button type="button" id="essayUseTtsFallback" class="essay-sprint-btn essay-fallback-btn ${sp.mp3Failed?'':'hidden'}">🔊 改用內建語音朗讀本題</button>`:''}
+        </div>
       </div>
       ${voiceBlockHtml}`
     : '';
@@ -1085,6 +1099,7 @@ function renderQuestion(){
       else if(state.essaySpeech.status==='paused')resumeEssaySpeech(q);
     };
     if($('#essaySpeechStop'))$('#essaySpeechStop').onclick=()=>stopEssaySpeech();
+    if($('#essayUseTtsFallback'))$('#essayUseTtsFallback').onclick=()=>startTtsEssaySpeech(q,'已切換為內建語音朗讀本題');
     document.querySelectorAll('[data-speech-rate]').forEach(btn=>btn.onclick=()=>setEssaySpeechRate(Number(btn.dataset.speechRate),q));
     if($('#essayVoiceSelect')){
       populateEssayVoiceSelect();

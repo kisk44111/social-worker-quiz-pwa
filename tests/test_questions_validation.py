@@ -326,6 +326,10 @@ class QuestionValidationTests(unittest.TestCase):
         )
         self.assertEqual(link_drive_audio.extract_drive_file_id(""), "")
 
+        # Validate GitHub Release asset naming & matching (01-01.mp3 .. 07-20.mp3)
+        self.assertEqual(link_drive_audio.build_release_asset_name("01-專技社工師-社會工作", 1), "01-01.mp3")
+        self.assertEqual(link_drive_audio.build_release_asset_name("07-公職社工師-社會福利政策與法規", 20), "07-20.mp3")
+
         # Validate repository root essay-audio-manifest.json has all 160 essays with required keys
         manifest_path = Path("essay-audio-manifest.json")
         self.assertTrue(manifest_path.exists(), "essay-audio-manifest.json should exist in repo root")
@@ -335,8 +339,24 @@ class QuestionValidationTests(unittest.TestCase):
         self.assertIsInstance(manifest.get("items"), dict)
         self.assertEqual(len(manifest["items"]), 160)
         sample_item = manifest["items"]["2021-1-0401-E1"]
-        for req_key in ("fileId", "title", "subject", "filename", "folder"):
+        for req_key in ("directUrl", "fileId", "title", "subject", "filename", "folder"):
             self.assertIn(req_key, sample_item)
+
+        # Validate GitHub Release asset matching helper
+        mini_catalog = [
+            {"id": "2021-1-0401-E1", "folder": "01-專技社工師-社會工作", "seq": 1, "filename": "01-任務中心.mp3", "assetName": "01-01.mp3"},
+            {"id": "2021-1-0401-E2", "folder": "01-專技社工師-社會工作", "seq": 2, "filename": "02-新住民.mp3", "assetName": "01-02.mp3"},
+        ]
+        matched_urls, unmatched_assets = link_drive_audio.match_release_assets_to_catalog(
+            [
+                {"name": "01-01.mp3", "url": "https://github.com/u/r/releases/download/audio-v1/01-01.mp3"},
+                {"name": "01-02.mp3", "url": "https://github.com/u/r/releases/download/audio-v1/01-02.mp3"},
+            ],
+            mini_catalog,
+        )
+        self.assertEqual(unmatched_assets, [])
+        self.assertEqual(matched_urls["2021-1-0401-E1"], "https://github.com/u/r/releases/download/audio-v1/01-01.mp3")
+        self.assertEqual(matched_urls["2021-1-0401-E2"], "https://github.com/u/r/releases/download/audio-v1/01-02.mp3")
 
         # End-to-end test: Mode A (--from-json rclone style) + Mode B (--init & --from-csv)
         e1 = sample_essay("2021-1-0401-E1", number=1)

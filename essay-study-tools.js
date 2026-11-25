@@ -543,15 +543,31 @@
     return DRIVE_ID_PATTERN.test(text) ? text : '';
   }
 
-  function buildDriveAudioUrls(fileId) {
+  function buildDriveApiMediaUrl(fileId, apiKey) {
+    const id = extractDriveFileId(fileId);
+    const key = String(apiKey || '').trim();
+    if (!id || !key) return '';
+    return `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&key=${encodeURIComponent(key)}`;
+  }
+
+  function buildDriveAudioUrls(fileId, apiKey) {
     const id = extractDriveFileId(fileId);
     if (!id) return [];
     const encoded = encodeURIComponent(id);
-    return [
+    const urls = [];
+    const apiUrl = buildDriveApiMediaUrl(id, apiKey);
+    if (apiUrl) urls.push(apiUrl);
+    urls.push(
       `https://drive.google.com/uc?export=download&id=${encoded}`,
       `https://docs.google.com/uc?export=open&id=${encoded}`,
       `https://drive.usercontent.google.com/download?id=${encoded}&export=download&confirm=t`
-    ];
+    );
+    return urls;
+  }
+
+  function isValidAudioUrl(raw) {
+    const text = String(raw || '').trim();
+    return /^https?:\/\/\S+$/i.test(text);
   }
 
   function resolveEssayAudioEntry(manifest, questionId) {
@@ -560,17 +576,29 @@
     if (!items) return null;
     const raw = items[questionId];
     if (!raw || typeof raw !== 'object') return null;
+
+    const directUrl = isValidAudioUrl(raw.directUrl) ? String(raw.directUrl).trim() : '';
     const fileId = extractDriveFileId(raw.fileId);
-    if (!fileId) return null;
-    const urls = buildDriveAudioUrls(fileId);
+    const apiKey = String(raw.driveApiKey || manifest.driveApiKey || '').trim();
+
+    const urls = [];
+    if (directUrl) urls.push(directUrl);
+    if (fileId) {
+      for (const u of buildDriveAudioUrls(fileId, apiKey)) {
+        if (!urls.includes(u)) urls.push(u);
+      }
+    }
     if (!urls.length) return null;
+
     return {
       questionId,
+      directUrl,
       fileId,
       title: String(raw.title || ''),
       subject: String(raw.subject || ''),
       filename: String(raw.filename || ''),
       folder: String(raw.folder || ''),
+      sourceKind: directUrl ? 'cdn' : (apiKey ? 'driveApi' : 'driveWeb'),
       urls
     };
   }
@@ -623,6 +651,7 @@
     normaliseSpeechRate,
     toggleRevealedStage,
     extractDriveFileId,
+    buildDriveApiMediaUrl,
     buildDriveAudioUrls,
     resolveEssayAudioEntry,
     formatAudioTime,
