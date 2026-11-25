@@ -12,7 +12,8 @@
     ['he', '合', '總結與具體建議展望']
   ];
 
-  const SPEECH_RATES = [1, 1.25, 1.5];
+  const SPEECH_RATES = [1, 1.25, 1.5, 1.75];
+  const DRIVE_ID_PATTERN = /^[A-Za-z0-9_-]{10,128}$/;
   const PAUSE_MS = {
     HEADING: 450,
     SENTENCE: 280,
@@ -527,6 +528,73 @@
     return next;
   }
 
+  function extractDriveFileId(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return '';
+    const patterns = [
+      /\/file\/d\/([A-Za-z0-9_-]{10,128})/,
+      /\/d\/([A-Za-z0-9_-]{10,128})/,
+      /[?&]id=([A-Za-z0-9_-]{10,128})/
+    ];
+    for (const pattern of patterns) {
+      const m = text.match(pattern);
+      if (m && m[1]) return m[1];
+    }
+    return DRIVE_ID_PATTERN.test(text) ? text : '';
+  }
+
+  function buildDriveAudioUrls(fileId) {
+    const id = extractDriveFileId(fileId);
+    if (!id) return [];
+    const encoded = encodeURIComponent(id);
+    return [
+      `https://drive.google.com/uc?export=download&id=${encoded}`,
+      `https://docs.google.com/uc?export=open&id=${encoded}`,
+      `https://drive.usercontent.google.com/download?id=${encoded}&export=download&confirm=t`
+    ];
+  }
+
+  function resolveEssayAudioEntry(manifest, questionId) {
+    if (!manifest || typeof manifest !== 'object' || !questionId) return null;
+    const items = manifest.items && typeof manifest.items === 'object' ? manifest.items : null;
+    if (!items) return null;
+    const raw = items[questionId];
+    if (!raw || typeof raw !== 'object') return null;
+    const fileId = extractDriveFileId(raw.fileId);
+    if (!fileId) return null;
+    const urls = buildDriveAudioUrls(fileId);
+    if (!urls.length) return null;
+    return {
+      questionId,
+      fileId,
+      title: String(raw.title || ''),
+      subject: String(raw.subject || ''),
+      filename: String(raw.filename || ''),
+      folder: String(raw.folder || ''),
+      urls
+    };
+  }
+
+  function formatAudioTime(seconds) {
+    const sec = Number(seconds);
+    if (!Number.isFinite(sec) || sec < 0) return '0:00';
+    const whole = Math.floor(sec);
+    const mins = Math.floor(whole / 60);
+    const rem = whole % 60;
+    return `${mins}:${String(rem).padStart(2, '0')}`;
+  }
+
+  function clampSeekTime(currentTime, deltaSeconds, duration) {
+    const cur = Number.isFinite(Number(currentTime)) ? Number(currentTime) : 0;
+    const delta = Number.isFinite(Number(deltaSeconds)) ? Number(deltaSeconds) : 0;
+    const target = Math.max(0, cur + delta);
+    const dur = Number(duration);
+    if (Number.isFinite(dur) && dur > 0) {
+      return Math.min(dur, target);
+    }
+    return target;
+  }
+
   return {
     ESSAY_STAGES,
     SPEECH_RATES,
@@ -553,6 +621,11 @@
     findPrevEssayIndex,
     essayPositionInfo,
     normaliseSpeechRate,
-    toggleRevealedStage
+    toggleRevealedStage,
+    extractDriveFileId,
+    buildDriveAudioUrls,
+    resolveEssayAudioEntry,
+    formatAudioTime,
+    clampSeekTime
   };
 }));

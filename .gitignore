@@ -8,4 +8,12 @@
 *.flac
 lecture-mp3/
 .swq-tts-ref/
+credentials.json
+client_secret*.json
+token.json
+service-account*.json
+*.pem
+rclone.conf
+drive-export*.json
+.drive-cache/
 __pycache__/

@@ -11,7 +11,7 @@
 
 ### Git 快照
 
-- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v32` 鎖屏保活語音聽讀、NotebookLM 自動同步與直連工具及骨架盲測功能。
+- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v33` Google 雲端硬碟名師有聲課 MP3 雙模播放器（支援 iPhone 鎖屏單一 `<audio>` 無縫自動連播、進度拖曳、`1.0x/1.25x/1.5x/1.75x` 語速與內建語音自動降級）、NotebookLM 工具與骨架盲測功能。
 - GitHub Pages 使用 **legacy Pages**，來源是 `main` 分支根目錄 `/`，不是 Actions artifact，也不是 `gh-pages` 分支。
 - 近期核心里程碑（皆已合併並部署至 `origin/main`）：
   - `fa42f18`：`data-store.js` 補齊進階欄位驗證與確定性無損備份合併，新增 4 組測試並升級 PWA 至 `v27`。
@@ -21,7 +21,8 @@
   - `680281b`（`v29`）：新增純原生申論考前衝刺雙工具——Web Speech API 申論聽讀播放器（單題分段高亮、語速、通勤連播）與骨架盲測（主動回憶）訓練模式，新增 `essay-study-tools.js` 與測試。
   - `09f3479`（`v30`）：全面升級申論語音自然度——最高優先權排序高擬真神經網路中文語音、新增「🎙 朗讀聲音」下拉選單（`localStorage` `swq_essay_speech_voice`）、中文口語前處理與三層氣口呼吸停頓排程及柔和語調微調。
   - `06e2348`（`v31`）：新增零 API 依賴之「🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）」單題複製與整科 `.txt` 匯出。
-  - **`v32`（已部署）**：新增本機自動化工具 `tools/sync_notebooklm.py`（支援 `--dry-run`、`--export-only` 與獨立家目錄 Chrome Profile 之 Playwright 自動匯入 NotebookLM 及 `--generate-audio`）；修復手機鎖屏語音中斷（Web Audio + 靜音 PCM `<audio>` 保活、Media Session API 鎖屏控制卡片、鎖屏背景無延遲接句與 `visibilitychange` 斷點續播）；前端新增「🚀 複製講稿並開啟 NotebookLM」與「🎙 複製 Podcast 雙人對談提示詞」，同步升級 PWA 快取至 `v32`。
+  - `62dc731`（`v32`）：新增本機自動化工具 `tools/sync_notebooklm.py`（支援 `--dry-run`、`--export-only` 與獨立家目錄 Chrome Profile 之 Playwright 自動匯入 NotebookLM 及 `--generate-audio`）；修復手機鎖屏語音中斷（Web Audio + 靜音 PCM `<audio>` 保活、Media Session API 鎖屏控制卡片、鎖屏背景無延遲接句與 `visibilitychange` 斷點續播）；前端新增「🚀 複製講稿並開啟 NotebookLM」與「🎙 複製 Podcast 雙人對談提示詞」，同步升級 PWA 快取至 `v32`。
+  - **`v33`（本次更新）**：新增 `tools/link_drive_audio.py` 與根目錄 160 題 `essay-audio-manifest.json`（支援 `rclone`/Drive JSON 自動比對與 `--init`/CSV/互動式匯入）；PWA 升級為雙模音訊引擎（Google Drive 名師有聲課 MP3 優先＋主備用 URL 自動容錯＋離線／未綁定自動降級內建語音朗讀），採單一常駐 `<audio>` 實例於 `onended` 同步切換 `src` 並呼叫 `play()`，強化 iPhone 鎖屏自動連播下一題，完整綁定 Media Session（`play`/`pause`/`previoustrack`/`nexttrack`/`seekbackward`/`seekforward`/`seekto`），新增 `1.0x/1.25x/1.5x/1.75x` 語速與進度條拖曳，並將 `essay-audio-manifest.json` 納入 Service Worker `v33` Network-First 快取。
 - 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則
@@ -191,13 +192,13 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 | 檔案 | 說明 |
 |---|---|
 | `tests/data-store.test.cjs` | legacy migration、損毀資料復原、進階欄位驗證與確定性無損備份合併、v1 備份升級迴歸、IndexedDB unavailable fallback（搭配其餘 Node 測試共 40 項）。 |
-| `tests/essay-study-tools.test.cjs` | 高擬真中文語音排序與使用者偏好解析、口語化文本前處理、三層氣口停頓佇列、NotebookLM／Gemini 自然口語講稿轉換與提示詞、鎖屏跳過延遲判斷、混合題單通勤連播索引與盲測單段揭曉 11 項測試。 |
+| `tests/essay-study-tools.test.cjs` | 高擬真中文語音排序與使用者偏好解析、口語化文本前處理、三層氣口停頓佇列、NotebookLM／Gemini 自然口語講稿轉換與提示詞、鎖屏跳過延遲判斷、Google Drive 音檔 ID／備援 URL／進度時間與快轉夾值、混合題單通勤連播索引與盲測單段揭曉 12 項測試（全體 Node 測試共 41 項）。 |
 | `tests/study-engine.test.cjs` | 1/3/7/14 天複習、統計、已更正答案計分、加權推薦、週趨勢。 |
 | `tests/sw-cache-policy.test.cjs` | 快取隔離，避免刪到同 GitHub Pages 網域其他專案。 |
 | `tests/knowledge-base.test.cjs` | 卡片結構、來源索引與五科覆蓋。 |
 | `tests/exam-cram-guides.test.cjs` | 五科補帖完整性與每單元至少一題關聯歷屆題。 |
 | `tests/historical-theory-dossiers.test.cjs` | 理論／導讀／架構／概念延伸與實題連結完整性。 |
-| `tests/test_questions_validation.py` | 對 `tools.validate_questions`、`essayGuide` 結構驗證、`tools.generate_essay_answers`、`tools.sync_notebooklm` 及 `tools.build_lecture_mp3` 名師有聲課腳本與檔名清理的 9 項 Python unittest。 |
+| `tests/test_questions_validation.py` | 對 `tools.validate_questions`、`essayGuide` 結構驗證、`tools.generate_essay_answers`、`tools.sync_notebooklm`、`tools.build_lecture_mp3` 及 `tools.link_drive_audio`／`essay-audio-manifest.json` 結構的 10 項 Python unittest。 |
 | `tools/validate_questions.py` | release 前題庫 schema、ID、科別、題型、選項、答案、題號連續性與 `essayGuide` 結構驗證器。 |
 | `tools/import_115_second_social_worker.py` | 115 年第二次五科官方 PDF importer；fail-closed，預期每科 2 申論 + 40 選擇與 40 官方答案。 |
 | `tools/verify_115_second_social_worker.py` | 重新下載官方答案／更正 PDF，比對題庫答案與 SHA-256。需要網路與 `pdftotext`。 |
@@ -207,6 +208,7 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 | `tools/generate_content_mc_explanations.py` | 以 OpenRouter API 批次產生選擇題內容導向解析；已強化金鑰與寫入防護，屬離線維運工具。 |
 | `tools/sync_notebooklm.py` | 本機 NotebookLM 自動化同步與有聲書講稿工具：讀取 160 題申論按 7 科組裝自然口語講稿，支援 `--dry-run` 預覽、`--export-only` 離線輸出，以及以家目錄獨立 Chrome Profile（`~/.cache/swq-notebooklm-profile`，嚴禁置於 Git 儲存庫內）透過 Playwright 自動匯入 NotebookLM 並可選 `--generate-audio`。 |
 | `tools/build_lecture_mp3.py` | 本機 100% 離線申論有聲課批次製作工具：預設透過 Apple Silicon MLX 8-bit 零樣本聲音克隆模型（`mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit`，獨立 venv `~/.venvs/swq-mlx-tts`）搭配家目錄快取之 12 秒台灣老師純淨參考聲紋（`~/.cache/swq-tts-ref/tw_teacher_erinome_ref.wav`＋精確逐字稿，嚴格排除於 Git 儲存庫外），將全庫 160 題書面擬答轉譯為「道地台灣口音、清爽知性、平實自然不油膩」的大學社工系教授純口說逐字稿（零條列書面語、零浮誇打油詩口訣）；採「低 GPU 發熱、單進程高頻寬＋記憶體常駐快取」架構（預設 `--workers 1` 免除 GPU 搶佔、啟動時將全庫講稿與 Speaker／ICL Prompt 特徵常駐 32GB 記憶體避免逐段重算、每題完成自動釋放 Metal 快取並執行 `--cooldown` 預設 `2.0` 秒溫控冷卻，亦支援 `--workers 1～4`），搭配跨進程 `fcntl` 檔案鎖、非隱藏暫存檔原子替換（`os.replace`）與即時 `[已完成/總題數]`／ETA 進度顯示，經 `ffmpeg` 輸出 24kHz 單聲道 96kbps MP3（亦保留 `--engine edge` 備選模式）；預設輸出至 `~/Documents/2027社工師國考申論名師有聲課/`（7 科資料夾、0644 權限、支援 `--output-dir`／`--out-dir`，`.gitignore` 已全面排除 `*.mp3`/`*.wav`/`.swq-tts-ref/`）。 |
+| `tools/link_drive_audio.py` | Google 雲端硬碟 160 題申論 MP3 檔案 ID 對照表工具：讀取本機 7 科 160 題編號結構，支援 `--init` 建立／補齊 `essay-audio-manifest.json` 骨架、`--from-json` 自動比對 `rclone lsjson -R` 或 Drive API 清單、`--from-csv`／`--interactive` 匯入分享連結或 `fileId`，並提供 `--status` 檢視各科綁定覆蓋率；`.gitignore` 已嚴格排除所有 Google OAuth 憑證與 Token。 |
 | `tools/rebuild_mc_explanations.py` | 規則式重建選擇題解析；目前文字含「考選部標準答案」導向，若重跑可能覆蓋現有較佳內容，需先人工審查 diff。 |
 
 ---
@@ -440,8 +442,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 - 先 `importScripts('./sw-cache-policy.js')`。
 - cache namespace prefix 是 **`social-worker-quiz-pwa-`**，由 `sw-cache-policy.js` 統一管理。
-- 目前 active asset cache：`social-worker-quiz-pwa-assets-v32`。
-- 目前 active question data cache：`social-worker-quiz-pwa-data-v32`。
+- 目前 active asset cache：`social-worker-quiz-pwa-assets-v33`。
+- 目前 active question data cache：`social-worker-quiz-pwa-data-v33`（涵蓋 `questions.json` 與 `essay-audio-manifest.json` 雙 Network-First 策略）。
 - install：對 `ASSETS` 的 HTML、CSS、JS、manifest、icons 執行 `cache.addAll()`。
 - activate：只刪除同 prefix 且不在 `[CACHE, DATA_CACHE]` 的舊 cache；同網域其他 GitHub Pages repo 的 caches 不會被刪除。
 - navigation request：**Network-first**；成功時把 `./` 緩存，網路失敗時回傳 cache 的 `./`。
@@ -453,9 +455,9 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 這是非常重要的操作程序。因 static resource 是 cache-first，**只改檔案內容不改 URL 很容易讓 PWA 留在舊版。**
 
-1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=32`、`readability.css?build=32`、`essay-study-tools.js?build=32`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
+1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=33`、`readability.css?build=33`、`essay-study-tools.js?build=33`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 與 `essay-audio-manifest.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
 2. 在 `service-worker.js` 的 `ASSETS` 使用完全相同的新 URL。
-3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v32` → `v33`）。
+3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v33` → `v34`）。
 4. 確認新 cache 的 `ASSETS` 包含所有新增檔案；否則離線初次安裝會失敗，因 `cache.addAll()` 任一項失敗就會造成 install 失敗。
 5. 不要更改 `SWCachePolicy.CACHE_PREFIX`，除非有 migration 理由與 cache-isolation test。
 6. 以新瀏覽器 profile／實機 PWA 驗證：「更新」提示、更新後 reload、離線重新開啟與舊 cache 清除。
@@ -538,7 +540,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 | 分科模擬考 | 五科每科隨機 40 選擇題；計時、題號導覽、標記、交卷確認；交卷前不顯示答案。 | `renderMockSetup()`、`renderMock()`。 |
 | 五科連續模擬 | 五科各抽 40 題，合計 200 題，結果有分科統計。 | `renderMockSetup()`、`renderMockResult()`。 |
 | 歷屆完整試卷模式 | 題單剛好有 40 選擇題時可進入 historical paper mode。 | `renderList()` 的 `#paperMode`。 |
-| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 雙區塊結構化離線解答（起・承・轉・合擬答＋三類解析要點，全庫 160 題 100% 完備）；`v29`–`v32` 升級 Web Speech API 高擬真語音聽讀播放器（高擬真神經網路語音優先排序、手動中文語音切換器、自然口語前處理與三層氣口停頓、手機鎖屏背景保活＋Media Session 控制＋斷點自動恢復、分段高亮、`1.0x/1.25x/1.5x` 語速、通勤連播）、**NotebookLM 一鍵直連／Podcast 提示詞／口語講稿匯出**及骨架盲測（主動回憶）訓練開關。 | `renderEssayHtml()`、`renderEssaySprintBarHtml()`、`essay-study-tools.js`、`readability.css`。 |
+| 申論練習 | 題幹、計時、自動暫存、手動儲存、自評 5 項；`v28` 雙區塊結構化離線解答（起・承・轉・合擬答＋三類解析要點，全庫 160 題 100% 完備）；`v29`–`v33` 雙模申論音訊引擎（優先以單一常駐 `<audio>` 串流 Google Drive 名師有聲課 MP3、主備用串流 URL 容錯、進度條拖曳、`-15s/+15s` 快轉倒退、`1.0x/1.25x/1.5x/1.75x` 語速、預設開啟之 iPhone 鎖屏無縫自動連播與完整 Media Session 鎖屏控制；未綁定或離線自動無縫降級回高擬真 Web Speech 語音朗讀）、**NotebookLM 一鍵直連／Podcast 提示詞／口語講稿匯出**及骨架盲測（主動回憶）訓練開關。 | `renderEssayHtml()`、`renderEssaySprintBarHtml()`、`essay-study-tools.js`、`essay-audio-manifest.json`、`readability.css`。 |
 | 筆記、標籤與勘誤 | 每題能寫筆記、加入／移除自訂標籤；顯示官方來源與更正答案；`errataNotes` 有資料結構但目前 UI 尚未提供新增輸入。 | `questionTools()`、`bindQuestionTools()`。 |
 | 備份與還原 | 匯出 JSON；選檔後驗證與安全合併，不刪現有摘要。 | `renderDataManagement()`、`data-store.js`。 |
 | 知識庫 | 知識卡搜尋、五科大補帖、理論導讀／歷史／內容／架構、具名學者原題、概念延伸題。 | `renderKnowledge()` + 知識 JS/CSS 模組。 |
@@ -554,7 +556,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 ## P0：資料與發布安全
 
 1. **~~local `main` 過期~~（已同步完成／HEAD `c8fc487`）**：本地 `main` 已與遠端 `origin/main` 完全同步；後續開發前仍應維持先 `git fetch origin`、`git status` 確認對齊再動工的紀律。
-2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v32`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
+2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v33`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
 3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`generate_essay_answers.py`、`rebuild_mc_explanations.py` 會寫入 `questions.json`（其中 `generate_content_mc_explanations.py` 與 `generate_essay_answers.py` 皆已內建寫入前 `validate_questions` 全庫驗證與同目錄暫存檔原子替換 `os.replace`）。仍須檢查 diff、跑全測試、保留官方來源與 hash。
 4. **~~OpenRouter script 的 token 風險~~（已完成修復／Commit `e883088`）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 

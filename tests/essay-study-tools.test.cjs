@@ -161,6 +161,7 @@ test('toggleRevealedStage and normaliseSpeechRate handle blind recall and speed 
 
   assert.equal(tools.normaliseSpeechRate(1.25), 1.25);
   assert.equal(tools.normaliseSpeechRate(1.5), 1.5);
+  assert.equal(tools.normaliseSpeechRate(1.75), 1.75);
   assert.equal(tools.normaliseSpeechRate(2.5), 1);
   assert.equal(tools.normaliseSpeechRate('invalid'), 1);
 });
@@ -216,4 +217,46 @@ test('buildNotebookLmPodcastPrompt and shouldSkipSpeechPause support NotebookLM 
 
   assert.equal(tools.shouldSkipSpeechPause('hidden'), true);
   assert.equal(tools.shouldSkipSpeechPause('visible'), false);
+});
+
+test('extractDriveFileId, buildDriveAudioUrls, resolveEssayAudioEntry, formatAudioTime, and clampSeekTime support Drive MP3 playback', () => {
+  assert.equal(
+    tools.extractDriveFileId('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr_12/view?usp=sharing'),
+    '1AbCdEfGhIjKlMnOpQr_12'
+  );
+  assert.equal(
+    tools.extractDriveFileId('https://drive.google.com/open?id=1ZyXwVuTsRqPoNmLkJi_34'),
+    '1ZyXwVuTsRqPoNmLkJi_34'
+  );
+  assert.equal(tools.extractDriveFileId('1AbCdEfGhIjKlMnOpQr_12'), '1AbCdEfGhIjKlMnOpQr_12');
+  assert.equal(tools.extractDriveFileId(''), '');
+  assert.equal(tools.extractDriveFileId('short'), '');
+
+  const urls = tools.buildDriveAudioUrls('1AbCdEfGhIjKlMnOpQr_12');
+  assert.equal(urls.length, 3);
+  assert.equal(urls[0], 'https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOpQr_12');
+  assert.equal(urls[1], 'https://docs.google.com/uc?export=open&id=1AbCdEfGhIjKlMnOpQr_12');
+
+  const manifest = {
+    version: 1,
+    items: {
+      '2021-1-0401-E1': { fileId: '1AbCdEfGhIjKlMnOpQr_12', title: '01-任務中心取向', subject: '社會工作' },
+      '2021-1-0401-E2': { fileId: '', title: '02-新住民', subject: '社會工作' }
+    }
+  };
+  const resolved = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E1');
+  assert.ok(resolved);
+  assert.equal(resolved.fileId, '1AbCdEfGhIjKlMnOpQr_12');
+  assert.equal(resolved.urls[0], 'https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOpQr_12');
+  assert.equal(tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E2'), null);
+  assert.equal(tools.resolveEssayAudioEntry(manifest, 'missing-id'), null);
+
+  assert.equal(tools.formatAudioTime(0), '0:00');
+  assert.equal(tools.formatAudioTime(65.9), '1:05');
+  assert.equal(tools.formatAudioTime(378), '6:18');
+  assert.equal(tools.formatAudioTime(NaN), '0:00');
+
+  assert.equal(tools.clampSeekTime(10, -15, 300), 0);
+  assert.equal(tools.clampSeekTime(295, 15, 300), 300);
+  assert.equal(tools.clampSeekTime(60, 15, 300), 75);
 });

@@ -157,7 +157,7 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .essay-sprint-bar{padding:12px}
   .essay-sprint-quick,.essay-speech-row{width:100%}
   .essay-speech-play,.essay-blind-toggle{flex:1;text-align:center}
-  .speech-rate-group{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}
+  .speech-rate-group{width:100%;display:grid;grid-template-columns:repeat(4,1fr)}
   .essay-nav-inline{width:100%;justify-content:space-between}
   .speech-status{width:100%;border-radius:10px}
 }
@@ -229,4 +229,39 @@ button{font-weight:inherit}button:focus-visible,input:focus-visible{outline:3px 
   .essay-export-primary{background:#1f7f70;border-color:#1f7f70;color:#ffffff}
   .essay-export-primary:hover:not(:disabled){background:#279684;border-color:#279684}
   .essay-export-feedback{background:#183a34;border-color:#387d70;color:#bef3e7}
+}
+
+/* Dual-mode Google Drive lecture MP3 player & seek bar — build 33 */
+.essay-audio-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.essay-audio-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:800;line-height:1.35}
+.essay-audio-badge.is-mp3{background:#ddf5ee;border:1px solid #8bd4c1;color:#0e5e50}
+.essay-audio-badge.is-tts{background:#ece8fa;border:1px solid #cbc2ee;color:#413796}
+.essay-audio-track-title{font-size:12.5px;font-weight:650;color:#575077;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.essay-audio-progress-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:#ffffff;border:1px solid #d7d1f2}
+.essay-seek-bar{flex:1;min-width:90px;height:6px;accent-color:#176d60;cursor:pointer}
+.essay-seek-bar:disabled{opacity:.45;cursor:not-allowed}
+.essay-audio-time{font-size:12px;font-weight:750;font-variant-numeric:tabular-nums;color:#3d3566;min-width:36px;text-align:center}
+.essay-seek-btn{min-height:32px;padding:4px 8px;border:1px solid #cbc4ec;border-radius:9px;background:#f7f5ff;color:#382f84;font:inherit;font-size:12px;font-weight:800;cursor:pointer;flex:0 0 auto}
+.essay-seek-btn:hover:not(:disabled){background:#eae4fb;border-color:#9388db}
+.essay-seek-btn:disabled{opacity:.45;cursor:not-allowed}
+.essay-tts-fallback-box{border-top:1px dashed #d6d0ef;padding-top:8px}
+.essay-tts-fallback-box>summary{cursor:pointer;font-size:12.5px;font-weight:750;color:#575077;list-style-position:inside}
+.essay-tts-fallback-box .essay-voice-row{border-top:0;padding-top:8px}
+@media(max-width:600px){
+  .essay-audio-progress-row{flex-wrap:wrap;gap:6px}
+  .essay-seek-bar{order:1;flex:1 1 100%;width:100%}
+  .essay-seek-btn{order:2}
+  .essay-audio-time{order:2}
+}
+@media(prefers-color-scheme:dark){
+  .essay-audio-badge.is-mp3{background:#163d36;border-color:#358574;color:#9df0dc}
+  .essay-audio-badge.is-tts{background:#342d52;border-color:#5b5282;color:#dcd6ff}
+  .essay-audio-track-title{color:#c9c3de}
+  .essay-audio-progress-row{background:#2a253d;border-color:#4d456e}
+  .essay-seek-bar{accent-color:#56d4bd}
+  .essay-audio-time{color:#e6e2f7}
+  .essay-seek-btn{background:#352f4d;border-color:#5b5282;color:#eae6ff}
+  .essay-seek-btn:hover:not(:disabled){background:#443d63;border-color:#897fc4}
+  .essay-tts-fallback-box{border-top-color:#433c61}
+  .essay-tts-fallback-box>summary{color:#c4bddb}
 }

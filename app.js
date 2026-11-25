@@ -1,14 +1,17 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SPEECH_VOICE_PREF_KEY = 'swq_essay_speech_voice';
+const ESSAY_AUTO_NEXT_PREF_KEY = 'swq_essay_auto_next';
 function loadPreferredVoiceName(){try{return localStorage.getItem(SPEECH_VOICE_PREF_KEY)||''}catch(_){return ''}}
 function savePreferredVoiceName(name){try{if(name)localStorage.setItem(SPEECH_VOICE_PREF_KEY,name);else localStorage.removeItem(SPEECH_VOICE_PREF_KEY)}catch(_){}}
+function loadPreferredAutoNext(){try{const v=localStorage.getItem(ESSAY_AUTO_NEXT_PREF_KEY);return v===null?true:v==='1'}catch(_){return true}}
+function savePreferredAutoNext(enabled){try{localStorage.setItem(ESSAY_AUTO_NEXT_PREF_KEY,enabled?'1':'0')}catch(_){}}
 const state = {
-  questions: [], view: 'library', stack: [], currentList: [], currentIndex: 0,
+  questions: [], essayAudioManifest: { version: 1, items: {} }, view: 'library', stack: [], currentList: [], currentIndex: 0,
   favorites: new Set(), wrong: new Set(), answered: 0, correct: 0, attempts: [], reviews: [], mockExams: [], essayPractices: [], resume: null, plan: {weeklyGoal:120,startDate:null}, notes:{}, tags:{}, customTags:[], errataNotes:{}, filters:{},
   selected: null, submitted: false, examType: 'socialWorker', activeMockId: null, mockIndex: 0, essayStartedAt: null, essayInterval: null,
   essayBlindMode: false, essayRevealedStages: new Set(), essayLastQuestionId: null,
-  essaySpeech: { status: 'idle', rate: 1, continuous: false, voiceName: loadPreferredVoiceName(), activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null, pauseTimer: null }
+  essaySpeech: { status: 'idle', mode: 'tts', rate: 1, continuous: loadPreferredAutoNext(), voiceName: loadPreferredVoiceName(), activeSegment: null, activeLabel: '', statusNote: '', chunks: [], chunkIndex: 0, sessionId: 0, questionId: null, autoNextTimer: null, pauseTimer: null, audioEntry: null, audioUrls: [], audioUrlIndex: 0, currentTime: 0, duration: 0, seeking: false }
 };
 const socialSubjects = ['社會工作','人類行為與社會環境','社會工作直接服務','社會工作研究方法','社會政策與社會立法'];
 const publicSubjects = ['社會福利政策與法規','社會工作實務'];
@@ -128,7 +131,173 @@ const ESSAY_STAGES=(window.essayStudyTools?.ESSAY_STAGES)||[
   ['zhuan','轉','實務應用、困境與批判反思'],
   ['he','合','總結與具體建議展望']
 ];
-const SPEECH_RATES=(window.essayStudyTools?.SPEECH_RATES)||[1,1.25,1.5];
+const SPEECH_RATES=(window.essayStudyTools?.SPEECH_RATES)||[1,1.25,1.5,1.75];
+function getEssayAudioEntry(q){
+  if(!q||q.type!=='essay')return null;
+  if(window.essayStudyTools?.resolveEssayAudioEntry)return window.essayStudyTools.resolveEssayAudioEntry(state.essayAudioManifest,q.id);
+  return null;
+}
+function formatAudioTimeText(sec){
+  return window.essayStudyTools?.formatAudioTime?window.essayStudyTools.formatAudioTime(sec):'0:00';
+}
+function formatRateLabel(rate){
+  const n=Number(rate)||1;
+  return n===1?'1.0x':`${n}x`;
+}
+let lectureAudioEl=null, lectureAudioSwitching=false;
+function getLectureAudioEl(){
+  if(lectureAudioEl)return lectureAudioEl;
+  if(typeof document==='undefined')return null;
+  const el=document.createElement('audio');
+  el.preload='auto';
+  el.playsInline=true;
+  el.setAttribute('playsinline','');
+  el.setAttribute('webkit-playsinline','');
+  el.addEventListener('loadedmetadata',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3')return;
+    sp.duration=Number.isFinite(el.duration)?el.duration:0;
+    sp.currentTime=Number.isFinite(el.currentTime)?el.currentTime:0;
+    try{el.playbackRate=sp.rate}catch(_){}
+    syncEssayAudioProgressUI();
+    updateMediaSessionPositionState();
+  });
+  el.addEventListener('durationchange',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3')return;
+    sp.duration=Number.isFinite(el.duration)?el.duration:0;
+    syncEssayAudioProgressUI();
+    updateMediaSessionPositionState();
+  });
+  el.addEventListener('timeupdate',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3'||sp.seeking)return;
+    sp.currentTime=Number.isFinite(el.currentTime)?el.currentTime:0;
+    if(Number.isFinite(el.duration)&&el.duration>0)sp.duration=el.duration;
+    syncEssayAudioProgressUI();
+  });
+  el.addEventListener('playing',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3')return;
+    lectureAudioSwitching=false;
+    sp.status='playing';
+    sp.statusNote='';
+    const cur=state.currentList[state.currentIndex];
+    updateEssayMediaSession(cur&&cur.type==='essay'?cur:null,'playing');
+    updateMediaSessionPositionState();
+    syncEssaySpeechUI(false);
+  });
+  el.addEventListener('pause',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3'||lectureAudioSwitching||el.ended||sp.status==='idle')return;
+    sp.status='paused';
+    sp.statusNote='';
+    const cur=state.currentList[state.currentIndex];
+    updateEssayMediaSession(cur&&cur.type==='essay'?cur:null,'paused');
+    updateMediaSessionPositionState();
+    syncEssaySpeechUI(false);
+  });
+  el.addEventListener('seeked',()=>updateMediaSessionPositionState());
+  el.addEventListener('ratechange',()=>updateMediaSessionPositionState());
+  el.addEventListener('ended',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3'||sp.status==='idle')return;
+    handleLectureAudioEnded();
+  });
+  el.addEventListener('error',()=>{
+    const sp=state.essaySpeech;
+    if(sp.mode!=='mp3'||lectureAudioSwitching||sp.status==='idle')return;
+    handleLectureAudioError();
+  });
+  lectureAudioEl=el;
+  return el;
+}
+function syncEssayAudioProgressUI(){
+  const sp=state.essaySpeech;
+  const curEl=$('#essayAudioCurrent'), durEl=$('#essayAudioDuration'), seekEl=$('#essayAudioSeek');
+  const curQ=state.currentList[state.currentIndex];
+  const isCurrentTrack=Boolean(curQ&&sp.questionId===curQ.id&&sp.mode==='mp3');
+  const cur=isCurrentTrack?sp.currentTime:0;
+  const dur=isCurrentTrack?sp.duration:0;
+  if(curEl)curEl.textContent=formatAudioTimeText(cur);
+  if(durEl)durEl.textContent=formatAudioTimeText(dur);
+  if(seekEl&&!sp.seeking){
+    seekEl.value=dur>0?String(Math.min(1000,Math.max(0,Math.round((cur/dur)*1000)))):'0';
+    seekEl.disabled=!(isCurrentTrack&&dur>0);
+  }
+  const backBtn=$('#essayAudioSeekBack'), fwdBtn=$('#essayAudioSeekFwd');
+  if(backBtn)backBtn.disabled=!(isCurrentTrack&&dur>0);
+  if(fwdBtn)fwdBtn.disabled=!(isCurrentTrack&&dur>0);
+}
+function updateMediaSessionPositionState(){
+  if(typeof navigator==='undefined'||!('mediaSession'in navigator)||typeof navigator.mediaSession.setPositionState!=='function')return;
+  const sp=state.essaySpeech;
+  if(sp.mode!=='mp3'||!lectureAudioEl)return;
+  const duration=Number.isFinite(lectureAudioEl.duration)&&lectureAudioEl.duration>0?lectureAudioEl.duration:0;
+  if(!duration)return;
+  const position=Math.min(duration,Math.max(0,Number.isFinite(lectureAudioEl.currentTime)?lectureAudioEl.currentTime:0));
+  try{
+    navigator.mediaSession.setPositionState({duration,playbackRate:lectureAudioEl.playbackRate||sp.rate||1,position});
+  }catch(_){}
+}
+function seekLectureAudioBy(deltaSeconds){
+  const sp=state.essaySpeech;
+  if(sp.mode!=='mp3'||!lectureAudioEl)return;
+  const dur=Number.isFinite(lectureAudioEl.duration)?lectureAudioEl.duration:sp.duration;
+  if(!dur||dur<=0)return;
+  const nextTime=window.essayStudyTools?.clampSeekTime
+    ? window.essayStudyTools.clampSeekTime(lectureAudioEl.currentTime,deltaSeconds,dur)
+    : Math.min(dur,Math.max(0,(lectureAudioEl.currentTime||0)+deltaSeconds));
+  try{lectureAudioEl.currentTime=nextTime}catch(_){}
+  sp.currentTime=nextTime;
+  syncEssayAudioProgressUI();
+  updateMediaSessionPositionState();
+}
+function handleLectureAudioError(){
+  const sp=state.essaySpeech;
+  const cur=state.currentList[state.currentIndex];
+  if(!cur||cur.id!==sp.questionId)return;
+  if(sp.audioUrlIndex+1<sp.audioUrls.length){
+    sp.audioUrlIndex++;
+    const nextUrl=sp.audioUrls[sp.audioUrlIndex];
+    const el=getLectureAudioEl();
+    if(el){
+      lectureAudioSwitching=true;
+      sp.statusNote=`主線路載入異常，自動切換備用串流線路（${sp.audioUrlIndex+1}/${sp.audioUrls.length}）⋯`;
+      syncEssaySpeechUI(false);
+      el.src=nextUrl;
+      el.playbackRate=sp.rate;
+      lectureAudioSwitching=false;
+      const p=el.play();
+      if(p&&typeof p.catch==='function')p.catch(err=>{
+        if(err&&err.name==='AbortError')return;
+        handleLectureAudioError();
+      });
+      return;
+    }
+  }
+  // All Google Drive stream URLs failed -> seamlessly degrade to built-in Web Speech TTS
+  if(isSpeechSupported()){
+    startTtsEssaySpeech(cur,'雲端 MP3 暫時無法載入（可能離線或權限未設公開），已自動切換內建語音朗讀');
+  }else{
+    stopEssaySpeech('雲端 MP3 無法載入，請確認網路連線或 Google Drive 檔案權限');
+  }
+}
+function handleLectureAudioEnded(){
+  const sp=state.essaySpeech;
+  if(!sp.continuous){
+    stopEssaySpeech('✓ 本題名師有聲課播放完成');
+    return;
+  }
+  const nextIdx=window.essayStudyTools?window.essayStudyTools.findNextEssayIndex(state.currentList,state.currentIndex):-1;
+  if(nextIdx<0){
+    stopEssaySpeech('✓ 已完成目前題單全部申論有聲課');
+    return;
+  }
+  // CRITICAL for iOS lock-screen auto-advance: switch src & call play() SYNCHRONOUSLY
+  // on the exact same persistent <audio> element before re-rendering DOM!
+  navigateEssayForSpeech(nextIdx);
+}
 let cachedChineseVoices=[];
 function isSpeechSupported(){
   return typeof window!=='undefined'&&'speechSynthesis'in window&&typeof window.SpeechSynthesisUtterance==='function';
@@ -181,12 +350,19 @@ if(isSpeechSupported()){
 }
 function syncEssaySpeechUI(scrollActive=false){
   const sp=state.essaySpeech;
+  const curQ=state.currentList[state.currentIndex];
+  const mp3Entry=getEssayAudioEntry(curQ);
+  const usingMp3=sp.status!=='idle'&&sp.questionId===curQ?.id?sp.mode==='mp3':Boolean(mp3Entry);
   const isPlaying=sp.status==='playing', isPaused=sp.status==='paused';
   const playBtn=$('#essaySpeechPlay'), pauseBtn=$('#essaySpeechPause'), stopBtn=$('#essaySpeechStop'), statusEl=$('#essaySpeechStatus');
   if(playBtn){
     playBtn.classList.toggle('is-active',isPlaying);
     playBtn.setAttribute('aria-pressed',String(isPlaying));
-    playBtn.textContent=isPlaying?'🔊 朗讀中':(isPaused?'▶ 繼續朗讀':'🔊 朗讀本題');
+    if(usingMp3){
+      playBtn.textContent=isPlaying?'🎧 播放中':(isPaused?'▶ 繼續播放':'🎧 播放名師有聲課');
+    }else{
+      playBtn.textContent=isPlaying?'🔊 朗讀中':(isPaused?'▶ 繼續朗讀':'🔊 朗讀本題');
+    }
   }
   if(pauseBtn){
     pauseBtn.disabled=sp.status==='idle';
@@ -202,15 +378,29 @@ function syncEssaySpeechUI(scrollActive=false){
   });
   const commuteToggle=$('#essayCommuteToggle');
   if(commuteToggle)commuteToggle.checked=Boolean(sp.continuous);
+  const badgeEl=$('#essayAudioModeBadge');
+  if(badgeEl){
+    if(usingMp3){
+      badgeEl.className='essay-audio-badge is-mp3';
+      badgeEl.textContent='🎧 名師有聲課（MP3）';
+    }else{
+      badgeEl.className='essay-audio-badge is-tts';
+      badgeEl.textContent=mp3Entry?'🎙 內建朗讀備援中':'🎙 內建語音朗讀';
+    }
+  }
   if(statusEl){
     if(sp.statusNote)statusEl.textContent=sp.statusNote;
-    else if(isPlaying&&sp.activeLabel)statusEl.textContent=`▶ 正在朗讀：${sp.activeLabel}（${sp.rate.toFixed(sp.rate===1?1:2).replace(/\.00$/,'.0')}x）`;
+    else if(isPlaying&&sp.mode==='mp3')statusEl.textContent=`🎧 名師有聲課播放中（${formatRateLabel(sp.rate)}｜支援 iPhone 鎖屏連播）`;
+    else if(isPaused&&sp.mode==='mp3')statusEl.textContent=`⏸ 已暫停於 ${formatAudioTimeText(sp.currentTime)} / ${formatAudioTimeText(sp.duration)}`;
+    else if(isPlaying&&sp.activeLabel)statusEl.textContent=`▶ 正在朗讀：${sp.activeLabel}（${formatRateLabel(sp.rate)}）`;
     else if(isPaused&&sp.activeLabel)statusEl.textContent=`⏸ 已暫停於：${sp.activeLabel}`;
+    else if(mp3Entry)statusEl.textContent='已連結 Google 雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題';
     else statusEl.textContent='依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單';
   }
+  syncEssayAudioProgressUI();
   let activeEl=null;
   document.querySelectorAll('[data-speech-segment]').forEach(el=>{
-    const match=Boolean(sp.activeSegment&&el.dataset.speechSegment===sp.activeSegment);
+    const match=Boolean(sp.mode==='tts'&&sp.activeSegment&&el.dataset.speechSegment===sp.activeSegment);
     el.classList.toggle('is-speaking',match);
     if(match)activeEl=el;
   });
@@ -280,9 +470,18 @@ function navigateEssayForSpeech(targetIndex){
   state.currentIndex=targetIndex;
   saveResume();
   const nextQ=state.currentList[state.currentIndex];
+  if(!nextQ||nextQ.type!=='essay'){stopEssaySpeech();return}
   sp.questionId=nextQ.id;
-  renderQuestion();
-  startEssaySpeech(nextQ);
+  // Start next track synchronously on the SAME <audio> element BEFORE re-rendering DOM
+  // so iOS Safari keeps lock-screen background audio session alive seamlessly.
+  const nextEntry=getEssayAudioEntry(nextQ);
+  if(nextEntry){
+    startMp3EssayAudio(nextQ,nextEntry);
+    renderQuestion();
+  }else{
+    renderQuestion();
+    startTtsEssaySpeech(nextQ);
+  }
 }
 function updateEssayMediaSession(q,playbackState){
   if(typeof navigator==='undefined'||!('mediaSession'in navigator))return;
@@ -291,10 +490,14 @@ function updateEssayMediaSession(q,playbackState){
     ms.playbackState=playbackState;
     if(q&&typeof window.MediaMetadata==='function'){
       const examLabel=examConfigs[examOf(q)]?.label||'社工師考試';
-      const stageInfo=state.essaySpeech.activeLabel?`・${state.essaySpeech.activeLabel}`:'';
+      const sp=state.essaySpeech;
+      const entry=sp.mode==='mp3'?(sp.audioEntry||getEssayAudioEntry(q)):null;
+      const stageInfo=sp.mode==='mp3'
+        ? (entry?.title?`・${entry.title}`:'・名師有聲課')
+        : (sp.activeLabel?`・${sp.activeLabel}`:'');
       ms.metadata=new window.MediaMetadata({
         title:`${q.year}第${q.session}次｜${q.subject}${stageInfo}`,
-        artist:'台灣社工師歷屆題庫・申論聽讀',
+        artist:sp.mode==='mp3'?'2027 社工師申論名師有聲課（MP3）':'台灣社工師歷屆題庫・申論聽讀',
         album:examLabel,
         artwork:[
           {src:'./icon-192.png',sizes:'192x192',type:'image/png'},
@@ -304,7 +507,7 @@ function updateEssayMediaSession(q,playbackState){
     }
     const safeHandler=(action,fn)=>{try{ms.setActionHandler(action,fn)}catch(_){}};
     if(playbackState==='none'){
-      ['play','pause','stop','previoustrack','nexttrack'].forEach(a=>safeHandler(a,null));
+      ['play','pause','stop','previoustrack','nexttrack','seekbackward','seekforward','seekto'].forEach(a=>safeHandler(a,null));
       return;
     }
     safeHandler('play',()=>{
@@ -322,6 +525,19 @@ function updateEssayMediaSession(q,playbackState){
       const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{nextIndex:-1};
       if(pos.nextIndex>=0)navigateEssayForSpeech(pos.nextIndex);
     });
+    safeHandler('seekbackward',details=>seekLectureAudioBy(-(details?.seekOffset||15)));
+    safeHandler('seekforward',details=>seekLectureAudioBy(details?.seekOffset||15));
+    safeHandler('seekto',details=>{
+      const sp=state.essaySpeech;
+      if(sp.mode!=='mp3'||!lectureAudioEl||typeof details?.seekTime!=='number')return;
+      const dur=Number.isFinite(lectureAudioEl.duration)?lectureAudioEl.duration:sp.duration;
+      if(!dur||dur<=0)return;
+      const clamped=Math.min(dur,Math.max(0,details.seekTime));
+      try{lectureAudioEl.currentTime=clamped}catch(_){}
+      sp.currentTime=clamped;
+      syncEssayAudioProgressUI();
+      updateMediaSessionPositionState();
+    });
   }catch(_){}
 }
 function clearSpeechTimers(){
@@ -329,20 +545,35 @@ function clearSpeechTimers(){
   if(sp.autoNextTimer){clearTimeout(sp.autoNextTimer);sp.autoNextTimer=null}
   if(sp.pauseTimer){clearTimeout(sp.pauseTimer);sp.pauseTimer=null}
 }
+function stopLectureAudioOnly(){
+  if(!lectureAudioEl)return;
+  lectureAudioSwitching=true;
+  try{lectureAudioEl.pause()}catch(_){}
+  try{lectureAudioEl.currentTime=0}catch(_){}
+  lectureAudioSwitching=false;
+}
 function stopEssaySpeech(note=''){
   const sp=state.essaySpeech;
   clearSpeechTimers();
   stopSilentAudioKeepAlive();
+  stopLectureAudioOnly();
   updateEssayMediaSession(null,'none');
   sp.sessionId++;
   if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
   sp.status='idle';
+  sp.mode='tts';
   sp.activeSegment=null;
   sp.activeLabel='';
   sp.statusNote=note;
   sp.chunks=[];
   sp.chunkIndex=0;
   sp.questionId=null;
+  sp.audioEntry=null;
+  sp.audioUrls=[];
+  sp.audioUrlIndex=0;
+  sp.currentTime=0;
+  sp.duration=0;
+  sp.seeking=false;
   syncEssaySpeechUI(false);
 }
 function speakCurrentEssayChunk(q){
@@ -420,27 +651,101 @@ function speakCurrentEssayChunk(q){
   try{window.speechSynthesis.speak(utter)}
   catch(_){stopEssaySpeech('目前瀏覽器無法啟動語音合成')}
 }
-function startEssaySpeech(q){
-  if(!isSpeechSupported()||!q)return;
+function startMp3EssayAudio(q,entry){
+  const el=getLectureAudioEl();
+  if(!el||!entry||!entry.urls?.length){
+    startTtsEssaySpeech(q);
+    return;
+  }
+  const sp=state.essaySpeech;
+  clearSpeechTimers();
+  stopSilentAudioKeepAlive();
+  if(isSpeechSupported()){try{window.speechSynthesis.cancel()}catch(_){}}
+  sp.sessionId++;
+  sp.mode='mp3';
+  sp.questionId=q.id;
+  sp.audioEntry=entry;
+  sp.audioUrls=entry.urls;
+  sp.audioUrlIndex=0;
+  sp.currentTime=0;
+  sp.duration=0;
+  sp.seeking=false;
+  sp.activeSegment=null;
+  sp.activeLabel='';
+  sp.chunks=[];
+  sp.chunkIndex=0;
+  sp.status='playing';
+  sp.statusNote='正在載入 Google 雲端名師有聲課 MP3⋯';
+  lectureAudioSwitching=true;
+  el.src=entry.urls[0];
+  el.playbackRate=sp.rate;
+  lectureAudioSwitching=false;
+  updateEssayMediaSession(q,'playing');
+  syncEssaySpeechUI(false);
+  const playPromise=el.play();
+  if(playPromise&&typeof playPromise.catch==='function'){
+    playPromise.catch(err=>{
+      if(err&&err.name==='AbortError')return;
+      if(sp.mode==='mp3'&&sp.questionId===q.id)handleLectureAudioError();
+    });
+  }
+}
+function startTtsEssaySpeech(q,fallbackNote=''){
+  if(!isSpeechSupported()||!q){
+    if(fallbackNote)stopEssaySpeech(fallbackNote);
+    return;
+  }
   const queue=window.essayStudyTools?window.essayStudyTools.buildEssaySpeechQueue(q):[];
   if(!queue.length){stopEssaySpeech('本題尚無可朗讀文字');return}
   const sp=state.essaySpeech;
   clearSpeechTimers();
+  stopLectureAudioOnly();
   startSilentAudioKeepAlive();
   sp.sessionId++;
   try{window.speechSynthesis.cancel()}catch(_){}
+  sp.mode='tts';
   sp.questionId=q.id;
+  sp.audioEntry=null;
+  sp.audioUrls=[];
+  sp.audioUrlIndex=0;
+  sp.currentTime=0;
+  sp.duration=0;
   sp.chunks=queue;
   sp.chunkIndex=0;
   sp.activeSegment=null;
   sp.activeLabel='';
-  sp.statusNote='';
+  sp.statusNote=fallbackNote;
   sp.status='playing';
   speakCurrentEssayChunk(q);
+}
+function startEssaySpeech(q){
+  if(!q)return;
+  const entry=getEssayAudioEntry(q);
+  if(entry&&navigator.onLine!==false){
+    startMp3EssayAudio(q,entry);
+    return;
+  }
+  if(entry&&navigator.onLine===false&&isSpeechSupported()){
+    startTtsEssaySpeech(q,'目前為離線狀態，已自動降級為內建語音朗讀');
+    return;
+  }
+  startTtsEssaySpeech(q);
 }
 function pauseEssaySpeech(){
   const sp=state.essaySpeech;
   if(sp.status!=='playing')return;
+  if(sp.mode==='mp3'&&lectureAudioEl){
+    lectureAudioSwitching=true;
+    try{lectureAudioEl.pause()}catch(_){}
+    lectureAudioSwitching=false;
+    sp.status='paused';
+    sp.statusNote='';
+    const cur=state.currentList[state.currentIndex];
+    updateEssayMediaSession(cur&&cur.type==='essay'?cur:null,'paused');
+    updateMediaSessionPositionState();
+    syncEssaySpeechUI(false);
+    return;
+  }
   clearSpeechTimers();
   stopSilentAudioKeepAlive();
   sp.sessionId++;
@@ -453,18 +758,35 @@ function pauseEssaySpeech(){
 }
 function resumeEssaySpeech(q){
   const sp=state.essaySpeech;
-  if(sp.status!=='paused'||sp.questionId!==q.id||!sp.chunks.length){startEssaySpeech(q);return}
-  clearSpeechTimers();
-  startSilentAudioKeepAlive();
-  sp.sessionId++;
-  sp.status='playing';
-  sp.statusNote='';
-  speakCurrentEssayChunk(q);
+  if(sp.mode==='mp3'&&sp.status==='paused'&&sp.questionId===q.id&&lectureAudioEl&&lectureAudioEl.src){
+    sp.status='playing';
+    sp.statusNote='';
+    try{lectureAudioEl.playbackRate=sp.rate}catch(_){}
+    const p=lectureAudioEl.play();
+    if(p&&typeof p.catch==='function')p.catch(err=>{
+      if(err&&err.name==='AbortError')return;
+      handleLectureAudioError();
+    });
+    updateEssayMediaSession(q,'playing');
+    syncEssaySpeechUI(false);
+    return;
+  }
+  if(sp.mode==='tts'&&sp.status==='paused'&&sp.questionId===q.id&&sp.chunks.length){
+    clearSpeechTimers();
+    startSilentAudioKeepAlive();
+    sp.sessionId++;
+    sp.status='playing';
+    sp.statusNote='';
+    speakCurrentEssayChunk(q);
+    return;
+  }
+  startEssaySpeech(q);
 }
 if(typeof document!=='undefined'){
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState!=='visible')return;
     const sp=state.essaySpeech;
+    if(sp.mode==='mp3'){syncEssaySpeechUI(false);return}
     if(sp.status!=='playing'||!isSpeechSupported()||state.view!=='question')return;
     const cur=state.currentList[state.currentIndex];
     if(!cur||cur.id!==sp.questionId||!sp.chunks.length)return;
@@ -480,6 +802,12 @@ if(typeof document!=='undefined'){
 function setEssaySpeechRate(rate,q){
   const sp=state.essaySpeech;
   sp.rate=window.essayStudyTools?window.essayStudyTools.normaliseSpeechRate(rate):Number(rate)||1;
+  if(sp.mode==='mp3'&&lectureAudioEl){
+    try{lectureAudioEl.playbackRate=sp.rate}catch(_){}
+    updateMediaSessionPositionState();
+    syncEssaySpeechUI(false);
+    return;
+  }
   if(sp.status==='playing'&&sp.questionId===q.id&&sp.chunks.length){
     clearSpeechTimers();
     sp.sessionId++;
@@ -600,27 +928,50 @@ async function copyTextToClipboard(text){
 function renderEssaySprintBarHtml(q){
   const speechOk=isSpeechSupported();
   const sp=state.essaySpeech;
+  const mp3Entry=getEssayAudioEntry(q);
+  const hasAnyAudio=Boolean(mp3Entry||speechOk);
+  const isThisMp3Active=Boolean(sp.questionId===q.id&&sp.mode==='mp3');
   const pos=window.essayStudyTools?window.essayStudyTools.essayPositionInfo(state.currentList,state.currentIndex):{position:1,total:1,prevIndex:-1,nextIndex:-1};
   const hasModel=Boolean(q.essayGuide?.modelAnswer);
   const exportEssays=getSubjectExportEssays(q);
-  const speechControls=speechOk
-    ? `<div class="essay-speech-row">
-        <button type="button" class="essay-sprint-btn essay-speech-play ${sp.status==='playing'?'is-active':''}" id="essaySpeechPlay" aria-pressed="${sp.status==='playing'}">${sp.status==='playing'?'🔊 朗讀中':(sp.status==='paused'?'▶ 繼續朗讀':'🔊 朗讀本題')}</button>
-        <button type="button" class="essay-sprint-btn" id="essaySpeechPause" ${sp.status==='idle'?'disabled':''}>${sp.status==='paused'?'▶ 繼續':'⏸ 暫停'}</button>
-        <button type="button" class="essay-sprint-btn" id="essaySpeechStop" ${sp.status==='idle'?'disabled':''}>⏹ 停止</button>
-        <div class="speech-rate-group" role="group" aria-label="朗讀語速">${SPEECH_RATES.map(r=>`<button type="button" class="speech-rate-btn ${sp.rate===r?'is-active':''}" data-speech-rate="${r}" aria-pressed="${sp.rate===r}">${r===1?'1.0x':`${r}x`}</button>`).join('')}</div>
-      </div>
-      <div class="essay-voice-row">
+  const progressBarHtml=mp3Entry
+    ? `<div class="essay-audio-progress-row" aria-label="名師有聲課播放進度">
+        <button type="button" class="essay-seek-btn" id="essayAudioSeekBack" aria-label="倒退 15 秒" ${isThisMp3Active&&sp.duration>0?'':'disabled'}>↺ 15s</button>
+        <span class="essay-audio-time" id="essayAudioCurrent">${formatAudioTimeText(isThisMp3Active?sp.currentTime:0)}</span>
+        <input type="range" id="essayAudioSeek" class="essay-seek-bar" min="0" max="1000" step="1" value="${isThisMp3Active&&sp.duration>0?Math.round((sp.currentTime/sp.duration)*1000):0}" aria-label="拖曳調整播放進度" ${isThisMp3Active&&sp.duration>0?'':'disabled'}>
+        <span class="essay-audio-time" id="essayAudioDuration">${formatAudioTimeText(isThisMp3Active?sp.duration:0)}</span>
+        <button type="button" class="essay-seek-btn" id="essayAudioSeekFwd" aria-label="快轉 15 秒" ${isThisMp3Active&&sp.duration>0?'':'disabled'}>15s ↻</button>
+      </div>`
+    : '';
+  const voicePickerInner=speechOk
+    ? `<div class="essay-voice-row">
         <label class="essay-voice-picker" for="essayVoiceSelect">
-          <span>🎙 朗讀聲音</span>
+          <span>🎙 內建朗讀聲音</span>
           <select id="essayVoiceSelect" class="essay-voice-select" aria-label="選擇中文朗讀聲音">${buildVoiceOptionsHtml()}</select>
         </label>
-        <p class="essay-voice-tip">💡 若要直接在網頁內聽真人級語音，建議使用 <strong>Microsoft Edge 瀏覽器</strong>並選取「★ HsiaoChen Online (Natural)」；iOS/Mac 亦可於系統「輔助使用＞語音內容」下載進階版聲音。</p>
-      </div>
-      <div class="essay-commute-row">
-        <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🎧 通勤連播模式（播完自動接下一題）</span></label>
-        <span id="essaySpeechStatus" class="speech-status" aria-live="polite">依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單</span>
+        <p class="essay-voice-tip">💡 離線或尚未綁定雲端 MP3 時自動使用瀏覽器內建語音；Edge 可選「★ HsiaoChen Online (Natural)」，iOS/Mac 可於系統「輔助使用＞語音內容」下載進階版聲音。</p>
       </div>`
+    : '';
+  const voiceBlockHtml=mp3Entry&&speechOk
+    ? `<details class="essay-tts-fallback-box"><summary>內建語音朗讀備援設定（離線自動降級）</summary>${voicePickerInner}</details>`
+    : voicePickerInner;
+  const speechControls=hasAnyAudio
+    ? `<div class="essay-audio-head">
+        <span id="essayAudioModeBadge" class="essay-audio-badge ${mp3Entry?'is-mp3':'is-tts'}">${mp3Entry?'🎧 名師有聲課（MP3）':'🎙 內建語音朗讀'}</span>
+        ${mp3Entry&&mp3Entry.title?`<small class="essay-audio-track-title">${esc(mp3Entry.title)}</small>`:''}
+      </div>
+      <div class="essay-speech-row">
+        <button type="button" class="essay-sprint-btn essay-speech-play ${sp.status==='playing'?'is-active':''}" id="essaySpeechPlay" aria-pressed="${sp.status==='playing'}">${mp3Entry?(sp.status==='playing'?'🎧 播放中':(sp.status==='paused'?'▶ 繼續播放':'🎧 播放名師有聲課')):(sp.status==='playing'?'🔊 朗讀中':(sp.status==='paused'?'▶ 繼續朗讀':'🔊 朗讀本題'))}</button>
+        <button type="button" class="essay-sprint-btn" id="essaySpeechPause" ${sp.status==='idle'?'disabled':''}>${sp.status==='paused'?'▶ 繼續':'⏸ 暫停'}</button>
+        <button type="button" class="essay-sprint-btn" id="essaySpeechStop" ${sp.status==='idle'?'disabled':''}>⏹ 停止</button>
+        <div class="speech-rate-group" role="group" aria-label="播放語速">${SPEECH_RATES.map(r=>`<button type="button" class="speech-rate-btn ${sp.rate===r?'is-active':''}" data-speech-rate="${r}" aria-pressed="${sp.rate===r}">${formatRateLabel(r)}</button>`).join('')}</div>
+      </div>
+      ${progressBarHtml}
+      <div class="essay-commute-row">
+        <label class="commute-toggle"><input type="checkbox" id="essayCommuteToggle" ${sp.continuous?'checked':''}><span>🔁 自動連播下一題（iPhone 鎖屏無縫續播）</span></label>
+        <span id="essaySpeechStatus" class="speech-status" aria-live="polite">${mp3Entry?'已連結 Google 雲端名師有聲課 MP3，鎖屏放口袋可自動連播下一題':'依序朗讀：題目 → 起 → 承 → 轉 → 合 → 核心理論與法規清單'}</span>
+      </div>
+      ${voiceBlockHtml}`
     : '';
   const exportControls=`<div class="essay-export-row">
     <div class="essay-export-head"><span>🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）</span></div>
@@ -739,7 +1090,29 @@ function renderQuestion(){
       populateEssayVoiceSelect();
       $('#essayVoiceSelect').onchange=e=>setEssaySpeechVoice(e.target.value,q);
     }
-    if($('#essayCommuteToggle'))$('#essayCommuteToggle').onchange=e=>{state.essaySpeech.continuous=Boolean(e.target.checked)};
+    if($('#essayCommuteToggle'))$('#essayCommuteToggle').onchange=e=>{state.essaySpeech.continuous=Boolean(e.target.checked);savePreferredAutoNext(state.essaySpeech.continuous)};
+    if($('#essayAudioSeekBack'))$('#essayAudioSeekBack').onclick=()=>seekLectureAudioBy(-15);
+    if($('#essayAudioSeekFwd'))$('#essayAudioSeekFwd').onclick=()=>seekLectureAudioBy(15);
+    if($('#essayAudioSeek')){
+      const seekEl=$('#essayAudioSeek');
+      seekEl.oninput=()=>{
+        const sp=state.essaySpeech;
+        if(sp.mode!=='mp3'||!sp.duration)return;
+        sp.seeking=true;
+        const previewSec=(Number(seekEl.value)/1000)*sp.duration;
+        if($('#essayAudioCurrent'))$('#essayAudioCurrent').textContent=formatAudioTimeText(previewSec);
+      };
+      seekEl.onchange=()=>{
+        const sp=state.essaySpeech;
+        sp.seeking=false;
+        if(sp.mode!=='mp3'||!lectureAudioEl||!sp.duration)return;
+        const targetSec=(Number(seekEl.value)/1000)*sp.duration;
+        try{lectureAudioEl.currentTime=targetSec}catch(_){}
+        sp.currentTime=targetSec;
+        syncEssayAudioProgressUI();
+        updateMediaSessionPositionState();
+      };
+    }
     if($('#toggleBlindMode'))$('#toggleBlindMode').onclick=()=>{
       state.essayBlindMode=!state.essayBlindMode;
       state.essayRevealedStages=new Set();
@@ -929,9 +1302,23 @@ async function loadQuestions(attempt=1){
     $('#retryLoad').onclick=()=>{app.innerHTML='<div class="loading">正在重新下載題庫⋯</div>';loadQuestions()};
   }
 }
+async function loadEssayAudioManifest(){
+  try{
+    const response=await fetch('./essay-audio-manifest.json',{cache:'no-cache'});
+    if(!response.ok)return;
+    const data=await response.json();
+    if(data&&typeof data==='object'&&data.items&&typeof data.items==='object'){
+      state.essayAudioManifest=data;
+      if(state.view==='question'&&state.essaySpeech.status==='idle'&&state.currentList[state.currentIndex]?.type==='essay'){
+        renderQuestion();
+      }
+    }
+  }catch(_){/* Offline or missing manifest gracefully falls back to built-in TTS */}
+}
 async function bootstrap(){
   try{const loaded=await window.learningDataStore.initialize();applyLearningState(loaded.state);}
   catch(_){/* Keep the empty safe state; question loading must remain available. */}
+  loadEssayAudioManifest();
   loadQuestions();
 }
 bootstrap();

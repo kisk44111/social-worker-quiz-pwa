@@ -312,6 +312,92 @@ class QuestionValidationTests(unittest.TestCase):
             self.assertEqual(dest.read_bytes(), b"ID3-test-payload")
             self.assertEqual(list(dest.parent.glob("*.tmp-*")), [])
 
+    def test_link_drive_audio_and_manifest_structure(self):
+        from tools import link_drive_audio
+
+        # Validate Drive fileId & URL extraction
+        self.assertEqual(
+            link_drive_audio.extract_drive_file_id("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr_99/view?usp=sharing"),
+            "1AbCdEfGhIjKlMnOpQr_99",
+        )
+        self.assertEqual(
+            link_drive_audio.extract_drive_file_id("https://drive.google.com/uc?export=download&id=1ZyXwVuTsRqPoNmLkJi_88"),
+            "1ZyXwVuTsRqPoNmLkJi_88",
+        )
+        self.assertEqual(link_drive_audio.extract_drive_file_id(""), "")
+
+        # Validate repository root essay-audio-manifest.json has all 160 essays with required keys
+        manifest_path = Path("essay-audio-manifest.json")
+        self.assertTrue(manifest_path.exists(), "essay-audio-manifest.json should exist in repo root")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest.get("version"), 1)
+        self.assertEqual(manifest.get("totalEssays"), 160)
+        self.assertIsInstance(manifest.get("items"), dict)
+        self.assertEqual(len(manifest["items"]), 160)
+        sample_item = manifest["items"]["2021-1-0401-E1"]
+        for req_key in ("fileId", "title", "subject", "filename", "folder"):
+            self.assertIn(req_key, sample_item)
+
+        # End-to-end test: Mode A (--from-json rclone style) + Mode B (--init & --from-csv)
+        e1 = sample_essay("2021-1-0401-E1", number=1)
+        e1["year"], e1["session"] = 2021, 1
+        e1["prompt"] = "試論述任務中心取向對社會工作責信之意義。"
+        e2 = sample_essay("2021-1-0401-E2", number=2)
+        e2["year"], e2["session"] = 2021, 1
+        e2["prompt"] = "試問在台灣社會工作者如何增權新住民女性？"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            q_path = tmp_dir / "questions.json"
+            m_path = tmp_dir / "essay-audio-manifest.json"
+            q_path.write_text(json.dumps([e1, e2], ensure_ascii=False), encoding="utf-8")
+
+            # Mode B: --init skeleton
+            rc = link_drive_audio.main(["--questions", str(q_path), "--manifest", str(m_path), "--init"])
+            self.assertEqual(rc, 0)
+            init_doc = json.loads(m_path.read_text(encoding="utf-8"))
+            self.assertEqual(init_doc["totalEssays"], 2)
+            self.assertEqual(init_doc["linkedCount"], 0)
+
+            # Mode A: --from-json (rclone lsjson -R format)
+            rclone_json = tmp_dir / "rclone.json"
+            rclone_json.write_text(
+                json.dumps(
+                    [
+                        {
+                            "Path": f"01-專技社工師-社會工作/{init_doc['items']['2021-1-0401-E1']['filename']}",
+                            "Name": init_doc["items"]["2021-1-0401-E1"]["filename"],
+                            "ID": "1DriveFileIdForEssayOne01",
+                            "IsDir": False,
+                        }
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            rc = link_drive_audio.main(
+                ["--questions", str(q_path), "--manifest", str(m_path), "--from-json", str(rclone_json)]
+            )
+            self.assertEqual(rc, 0)
+            after_json = json.loads(m_path.read_text(encoding="utf-8"))
+            self.assertEqual(after_json["linkedCount"], 1)
+            self.assertEqual(after_json["items"]["2021-1-0401-E1"]["fileId"], "1DriveFileIdForEssayOne01")
+
+            # Mode B: --from-csv preserves previous fileId and adds E2 via Drive share URL
+            csv_path = tmp_dir / "links.csv"
+            csv_path.write_text(
+                "question_id,url\n2021-1-0401-E2,https://drive.google.com/file/d/1DriveFileIdForEssayTwo02/view\n",
+                encoding="utf-8",
+            )
+            rc = link_drive_audio.main(
+                ["--questions", str(q_path), "--manifest", str(m_path), "--from-csv", str(csv_path)]
+            )
+            self.assertEqual(rc, 0)
+            after_csv = json.loads(m_path.read_text(encoding="utf-8"))
+            self.assertEqual(after_csv["linkedCount"], 2)
+            self.assertEqual(after_csv["items"]["2021-1-0401-E1"]["fileId"], "1DriveFileIdForEssayOne01")
+            self.assertEqual(after_csv["items"]["2021-1-0401-E2"]["fileId"], "1DriveFileIdForEssayTwo02")
+
 
 if __name__ == "__main__":
     unittest.main()
