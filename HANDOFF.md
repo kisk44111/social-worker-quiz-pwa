@@ -11,7 +11,7 @@
 
 ### Git 快照
 
-- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v34` 永久高速 CDN（GitHub Releases `audio-v1` `directUrl`）＋ Google Drive API v3 雙軌名師有聲課 MP3 播放器（支援 iPhone 鎖屏單一 `<audio>` 無縫自動連播、進度拖曳、`1.0x/1.25x/1.5x/1.75x` 語速與一鍵內建語音降級按鈕）、NotebookLM 工具與骨架盲測功能。
+- 遠端與本地正式分支：`main` 已與 `origin/main` 完全同步，涵蓋全題庫 160 / 160 題申論結構化擬答與解析（`c8fc487`）及 PWA `v35` 永久高速 CDN（GitHub Releases `audio-v1` `directUrl`）＋ Google Drive API v3 雙軌名師有聲課 MP3 播放器（確保無 `crossorigin`、SW 完全直通外部網域、`no-store` 清單與真實 `MediaError` 診斷碼、iPhone 鎖屏單一 `<audio>` 無縫自動連播、進度拖曳、`1.0x/1.25x/1.5x/1.75x` 語速與一鍵內建語音降級按鈕）、NotebookLM 工具與骨架盲測功能。
 - GitHub Pages 使用 **legacy Pages**，來源是 `main` 分支根目錄 `/`，不是 Actions artifact，也不是 `gh-pages` 分支。
 - 近期核心里程碑（皆已合併並部署至 `origin/main`）：
   - `fa42f18`：`data-store.js` 補齊進階欄位驗證與確定性無損備份合併，新增 4 組測試並升級 PWA 至 `v27`。
@@ -23,7 +23,8 @@
   - `06e2348`（`v31`）：新增零 API 依賴之「🎧 匯出自然口語講稿（適配 NotebookLM / Gemini 聽讀）」單題複製與整科 `.txt` 匯出。
   - `62dc731`（`v32`）：新增本機自動化工具 `tools/sync_notebooklm.py`（支援 `--dry-run`、`--export-only` 與獨立家目錄 Chrome Profile 之 Playwright 自動匯入 NotebookLM 及 `--generate-audio`）；修復手機鎖屏語音中斷（Web Audio + 靜音 PCM `<audio>` 保活、Media Session API 鎖屏控制卡片、鎖屏背景無延遲接句與 `visibilitychange` 斷點續播）；前端新增「🚀 複製講稿並開啟 NotebookLM」與「🎙 複製 Podcast 雙人對談提示詞」，同步升級 PWA 快取至 `v32`。
   - `558ea76` / `694f3b3`（`v33`）：新增 `tools/link_drive_audio.py` 與根目錄 160 題 `essay-audio-manifest.json`；PWA 升級為雙模音訊引擎、單一常駐 `<audio>` 實例支援 iPhone 鎖屏無縫自動連播、Media Session 全功能控制與 `1.0x/1.25x/1.5x/1.75x` 語速。
-  - **`v34`（本次更新）**：徹底解決 `drive.google.com/uc` 對 >4MB 檔案於瀏覽器 `<audio>` 觸發 HTML 確認頁／跨網域阻擋問題——前端依序串流 `directUrl`（GitHub Releases `audio-v1` 全球 CDN `01-01.mp3`～`07-20.mp3` 永久直連、支援 HTTP 206 Range）→ Google Drive API v3 官方媒體端點（`googleapis.com/drive/v3/files/{id}?alt=media&key=...`）→ Drive 網頁備援；若全線路失敗則清楚提示並提供一鍵「🔊 改用內建語音朗讀本題」按鈕；擴充 `tools/link_drive_audio.py` 支援 `--upload-github-release`／`--from-github-release`，同步升級 PWA 快取至 `v34`。
+  - `4524b1b`（`v34`）：建立 GitHub Release `audio-v1` 上傳 160 支 MP3（`01-01.mp3`～`07-20.mp3`）寫入 `directUrl`，前端依序串流 `directUrl` → Drive API v3 → Drive 備援，並新增一鍵「改用內建語音朗讀本題」降級按鈕。
+  - **`v35`（本次更新）**：針對 iOS Safari `<audio>` 串流強化防禦——明確保證 `<audio>` 不帶 `crossorigin` 屬性、修正 `error` 事件與 `play()` Promise 拒絕重複推進線路問題、於失敗提示附加各嘗試網域之真實 `MediaError` 診斷碼（`[code:N]`）、`service-worker.js`（`v35`）最頂端完全放行跨網域請求並以 `cache: 'no-store'` Network-First 載入最新 `essay-audio-manifest.json`。
 - 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則
@@ -443,8 +444,8 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 - 先 `importScripts('./sw-cache-policy.js')`。
 - cache namespace prefix 是 **`social-worker-quiz-pwa-`**，由 `sw-cache-policy.js` 統一管理。
-- 目前 active asset cache：`social-worker-quiz-pwa-assets-v34`。
-- 目前 active question data cache：`social-worker-quiz-pwa-data-v34`（涵蓋 `questions.json` 與 `essay-audio-manifest.json` 雙 Network-First 策略）。
+- 目前 active asset cache：`social-worker-quiz-pwa-assets-v35`。
+- 目前 active question data cache：`social-worker-quiz-pwa-data-v35`（涵蓋 `questions.json` 與 `essay-audio-manifest.json` 雙 Network-First `no-store` 策略）。
 - install：對 `ASSETS` 的 HTML、CSS、JS、manifest、icons 執行 `cache.addAll()`。
 - activate：只刪除同 prefix 且不在 `[CACHE, DATA_CACHE]` 的舊 cache；同網域其他 GitHub Pages repo 的 caches 不會被刪除。
 - navigation request：**Network-first**；成功時把 `./` 緩存，網路失敗時回傳 cache 的 `./`。
@@ -456,9 +457,9 @@ CSS 是 cascade-based，非 component scoped。新增規則前須以亮／暗色
 
 這是非常重要的操作程序。因 static resource 是 cache-first，**只改檔案內容不改 URL 很容易讓 PWA 留在舊版。**
 
-1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=34`、`readability.css?build=34`、`essay-study-tools.js?build=34`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 與 `essay-audio-manifest.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
+1. 在 `index.html` 修改有變更檔案的 `?build=N`：例如目前 `app.js?build=35`、`readability.css?build=35`、`essay-study-tools.js?build=35`、`data-store.js?build=27`、`knowledge-readability-fix.css?build=2`（純內容更新 `questions.json` 與 `essay-audio-manifest.json` 採 Network-first 且不經 `?build=`，毋須每次遞增前端版號）。
 2. 在 `service-worker.js` 的 `ASSETS` 使用完全相同的新 URL。
-3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v34` → `v35`）。
+3. 修改 `CACHE`、`DATA_CACHE` 版本（通常同時遞增，例如 `v35` → `v36`）。
 4. 確認新 cache 的 `ASSETS` 包含所有新增檔案；否則離線初次安裝會失敗，因 `cache.addAll()` 任一項失敗就會造成 install 失敗。
 5. 不要更改 `SWCachePolicy.CACHE_PREFIX`，除非有 migration 理由與 cache-isolation test。
 6. 以新瀏覽器 profile／實機 PWA 驗證：「更新」提示、更新後 reload、離線重新開啟與舊 cache 清除。
@@ -557,7 +558,7 @@ curl -fsSI 'https://kisk44111.github.io/social-worker-quiz-pwa/?v=2'
 ## P0：資料與發布安全
 
 1. **~~local `main` 過期~~（已同步完成／HEAD `c8fc487`）**：本地 `main` 已與遠端 `origin/main` 完全同步；後續開發前仍應維持先 `git fetch origin`、`git status` 確認對齊再動工的紀律。
-2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v34`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
+2. **PWA versioning 是手動且易漏**：HTML 的 build query、SW ASSETS、asset/data cache version 必須手工一致（目前最新版本為 `v35`）；近期已發生新樣式存在但舊 app JS 仍因 cache-first 顯示舊排序的問題。建議未來建立 release helper 或最少新增檢查測試，但不能未設計 migration 就盲目全面重構。
 3. **題庫維護腳本可覆寫正式資料**：所有 `tools/import_*`、`add_115_*`、`generate_content_*`、`generate_essay_answers.py`、`rebuild_mc_explanations.py` 會寫入 `questions.json`（其中 `generate_content_mc_explanations.py` 與 `generate_essay_answers.py` 皆已內建寫入前 `validate_questions` 全庫驗證與同目錄暫存檔原子替換 `os.replace`）。仍須檢查 diff、跑全測試、保留官方來源與 hash。
 4. **~~OpenRouter script 的 token 風險~~（已完成修復／Commit `e883088`）**：`tools/generate_content_mc_explanations.py` 已完成安全重構與過時 docstring 修正。現已支援 `--dry-run`（與 `pending == 0` 時零 Keychain 讀取／零 API 呼叫）、優先使用環境變數 `OPENROUTER_API_KEY`、僅明確傳入 `--use-keychain` 才讀取 macOS Keychain、遠端請求與 `--apply` 皆須 `--confirm-remote-api` 確認、寫回 `questions.json` 前必經 `validate_questions` 驗證與原子替換，並將無效回應日誌改存於受控 `0700/0600` 時間戳記目錄。執行時仍須確認額度與範圍，且絕不可記錄或提交金鑰。
 
