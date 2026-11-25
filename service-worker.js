@@ -30,10 +30,11 @@ self.addEventListener('activate', event => event.waitUntil(
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (event.request.headers.has('range')) return;
   const reqUrl = new URL(event.request.url);
-  // Strictly bypass Service Worker for ALL cross-origin requests (e.g., GitHub Releases / Google Drive MP3 streams)
-  // so iOS Safari native networking handles 302 redirects and HTTP Range 206 streaming untouched.
-  if (reqUrl.origin !== self.location.origin) return;
+  // Strictly bypass Service Worker for ALL cross-origin requests and MP3 media streams
+  // so iOS Safari native networking handles redirects and HTTP Range 206 streaming untouched.
+  if (reqUrl.origin !== self.location.origin || reqUrl.pathname.endsWith('.mp3')) return;
   if (event.request.mode === 'navigate') {
     event.respondWith(fetch(event.request)
       .then(response => cacheResponse(CACHE, './', response))

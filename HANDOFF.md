@@ -24,7 +24,7 @@
   - `62dc731`（`v32`）：新增本機自動化工具 `tools/sync_notebooklm.py`（支援 `--dry-run`、`--export-only` 與獨立家目錄 Chrome Profile 之 Playwright 自動匯入 NotebookLM 及 `--generate-audio`）；修復手機鎖屏語音中斷（Web Audio + 靜音 PCM `<audio>` 保活、Media Session API 鎖屏控制卡片、鎖屏背景無延遲接句與 `visibilitychange` 斷點續播）；前端新增「🚀 複製講稿並開啟 NotebookLM」與「🎙 複製 Podcast 雙人對談提示詞」，同步升級 PWA 快取至 `v32`。
   - `558ea76` / `694f3b3`（`v33`）：新增 `tools/link_drive_audio.py` 與根目錄 160 題 `essay-audio-manifest.json`；PWA 升級為雙模音訊引擎、單一常駐 `<audio>` 實例支援 iPhone 鎖屏無縫自動連播、Media Session 全功能控制與 `1.0x/1.25x/1.5x/1.75x` 語速。
   - `4524b1b`（`v34`）：建立 GitHub Release `audio-v1` 上傳 160 支 MP3（`01-01.mp3`～`07-20.mp3`）寫入 `directUrl`，前端依序串流 `directUrl` → Drive API v3 → Drive 備援，並新增一鍵「改用內建語音朗讀本題」降級按鈕。
-  - **`v35`（本次更新）**：針對 iOS Safari `<audio>` 串流強化防禦——明確保證 `<audio>` 不帶 `crossorigin` 屬性、修正 `error` 事件與 `play()` Promise 拒絕重複推進線路問題、於失敗提示附加各嘗試網域之真實 `MediaError` 診斷碼（`[code:N]`）、`service-worker.js`（`v35`）最頂端完全放行跨網域請求並以 `cache: 'no-store'` Network-First 載入最新 `essay-audio-manifest.json`。
+  - **`v35`（本次更新）**：透過無頭 Playwright WebKit（模擬 iPhone 15 Pro）＋ Chromium 真實點擊 E2E 實測抓出 iOS Safari 拒播根因（GitHub Releases 302 轉址至無副檔名 UUID 並回傳 `application/octet-stream` 遭 AVFoundation `code:4` 拒絕，Google Drive 網頁端點則被 `CORP: same-site` 阻擋）；建立同源靜態音檔託管庫 `swq-audio-1`（01–03 科 72 支）與 `swq-audio-2`（04–07 科 88 支）直接提供同源 `Content-Type: audio/mpeg`＋`HTTP 206 Range` 串流，同時保留 `releaseUrl`（GitHub Release `audio-v1`）與 `fileId`（Google Drive API v3）作為備援；將單一常駐 `<audio id="essayLectureAudio">` 掛載於 DOM 並確保無 `crossorigin` 屬性、`service-worker.js`（`v35`）頂端完全放行跨網域／`.mp3`／`Range` 請求並以 `no-store` 載入 `essay-audio-manifest.json`。
 - 每次新開發前請先確認 `git fetch origin`、`git status --short --branch` 乾淨且對齊 `origin/main`。
 
 ### 不可破壞的資料原則

@@ -138,15 +138,17 @@ def build_manifest_document(
     catalog: list[dict[str, Any]],
     file_id_map: dict[str, str] | None = None,
     direct_url_map: dict[str, str] | None = None,
+    release_url_map: dict[str, str] | None = None,
     existing_manifest: dict[str, Any] | None = None,
     preserve_existing: bool = True,
     drive_api_key: str | None = None,
 ) -> dict[str, Any]:
-    """組裝標準化的 essay-audio-manifest.json 結構（同時支援 directUrl 與 Google Drive fileId）。"""
+    """組裝標準化的 essay-audio-manifest.json 結構（支援同源 audio/mpeg directUrl、GitHub Release releaseUrl 與 Google Drive fileId）。"""
     existing = existing_manifest or {}
     existing_items = existing.get("items") or {}
     incoming_ids = file_id_map or {}
     incoming_urls = direct_url_map or {}
+    incoming_releases = release_url_map or {}
     items: dict[str, dict[str, Any]] = {}
     linked_drive = 0
     linked_direct = 0
@@ -167,8 +169,15 @@ def build_manifest_document(
         if final_url:
             linked_direct += 1
 
+        incoming_rel = str(incoming_releases.get(qid) or "").strip()
+        prev_rel = str(prev_item.get("releaseUrl") or "").strip()
+        if not incoming_rel and not prev_rel and prev_url and "/releases/download/" in prev_url and incoming_url and incoming_url != prev_url:
+            prev_rel = prev_url
+        final_rel = incoming_rel or prev_rel
+
         item_obj: dict[str, Any] = {
             "directUrl": final_url,
+            "releaseUrl": final_rel,
             "fileId": final_id,
             "title": entry["title"],
             "subject": entry["subject"],
@@ -601,6 +610,33 @@ def run_interactive_paste(catalog: list[dict[str, Any]]) -> tuple[dict[str, str]
         tmp_csv.unlink(missing_ok=True)
 
 
+def build_pages_direct_urls(catalog: list[dict[str, Any]], spec: str) -> dict[str, str]:
+    """
+    依指定規則產生同源 GitHub Pages audio/mpeg 直連網址，格式如：
+      01-03=https://kisk44111.github.io/swq-audio-1,04-07=https://kisk44111.github.io/swq-audio-2
+    """
+    rules: list[tuple[int, int, str]] = []
+    for part in str(spec or "").split(","):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        rng, base = part.split("=", 1)
+        base = base.strip().rstrip("/")
+        m = re.match(r"^(\d{1,2})(?:-(\d{1,2}))?$", rng.strip())
+        if m and base:
+            lo = int(m.group(1))
+            hi = int(m.group(2) or lo)
+            rules.append((lo, hi, base))
+    urls: dict[str, str] = {}
+    for entry in catalog:
+        idx = int(extract_folder_index(entry["folder"]))
+        for lo, hi, base in rules:
+            if lo <= idx <= hi:
+                urls[entry["id"]] = f"{base}/{entry['assetName']}"
+                break
+    return urls
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="將本機 160 支申論名師有聲課 MP3 與 GitHub Releases CDN 或 Google Drive 配對，生成 essay-audio-manifest.json。"
@@ -609,6 +645,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--audio-dir", type=Path, default=DEFAULT_AUDIO_DIR, help="本機 MP3 課程根目錄")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH, help="輸出 manifest 路徑")
     parser.add_argument("--init", action="store_true", help="建立或補齊全部 160 題骨架（保留既有連結）")
+    parser.add_argument("--from-pages-bases", type=str, default=None, help="設定同源 GitHub Pages audio/mpeg 基底（如 01-03=https://.../swq-audio-1,04-07=https://.../swq-audio-2）")
     parser.add_argument("--from-github-release", type=str, default=None, help="讀取指定 GitHub Release（如 audio-v1）資產網址並寫入 directUrl")
     parser.add_argument("--upload-github-release", type=str, default=None, help="一鍵建立並上傳 160 支 MP3（01-01.mp3～07-20.mp3）至 GitHub Release 並寫入 directUrl")
     parser.add_argument("--github-repo", type=str, default=None, help="指定 GitHub Repo（如 owner/repo，預設自動偵測目前儲存庫）")
@@ -641,6 +678,7 @@ def main(argv: list[str] | None = None) -> int:
     has_write_action = any(
         [
             args.init,
+            args.from_pages_bases,
             args.from_github_release,
             args.upload_github_release,
             args.from_json,
@@ -655,7 +693,13 @@ def main(argv: list[str] | None = None) -> int:
 
     incoming_ids: dict[str, str] = {}
     incoming_urls: dict[str, str] = {}
+    incoming_releases: dict[str, str] = {}
     unmatched_notes: list[str] = []
+
+    if args.from_pages_bases:
+        pages_urls = build_pages_direct_urls(catalog, args.from_pages_bases)
+        incoming_urls.update(pages_urls)
+        print(f"已依同源 GitHub Pages 規則產生 {len(pages_urls)} 題 audio/mpeg 直連網址。")
 
     if args.upload_github_release:
         if args.dry_run:
@@ -668,15 +712,21 @@ def main(argv: list[str] | None = None) -> int:
             concurrency=args.upload_concurrency,
         )
         matched_urls, unmatched_assets = match_release_assets_to_catalog(assets, catalog)
-        incoming_urls.update(matched_urls)
+        if incoming_urls:
+            incoming_releases.update(matched_urls)
+        else:
+            incoming_urls.update(matched_urls)
         unmatched_notes.extend(unmatched_assets)
-        print(f"自 GitHub Release `{args.upload_github_release}` 成功綁定 {len(matched_urls)} 題永久直連 CDN 網址。")
+        print(f"自 GitHub Release `{args.upload_github_release}` 成功綁定 {len(matched_urls)} 題網址。")
     elif args.from_github_release:
         assets = fetch_github_release_assets(args.from_github_release, repo=args.github_repo)
         matched_urls, unmatched_assets = match_release_assets_to_catalog(assets, catalog)
-        incoming_urls.update(matched_urls)
+        if incoming_urls:
+            incoming_releases.update(matched_urls)
+        else:
+            incoming_urls.update(matched_urls)
         unmatched_notes.extend(unmatched_assets)
-        print(f"自 GitHub Release `{args.from_github_release}` 成功比對 {len(matched_urls)} 題永久直連 CDN 網址。")
+        print(f"自 GitHub Release `{args.from_github_release}` 成功比對 {len(matched_urls)} 題網址。")
 
     if args.from_json is not None:
         json_path = args.from_json.expanduser().resolve()
@@ -717,6 +767,7 @@ def main(argv: list[str] | None = None) -> int:
         catalog,
         file_id_map=incoming_ids,
         direct_url_map=incoming_urls,
+        release_url_map=incoming_releases,
         existing_manifest=existing,
         preserve_existing=not args.force_reset,
         drive_api_key=args.drive_api_key,

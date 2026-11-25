@@ -151,13 +151,16 @@ function extractUrlHostLabel(url){
 function getLectureAudioEl(){
   if(lectureAudioEl)return lectureAudioEl;
   if(typeof document==='undefined')return null;
-  const el=document.createElement('audio');
+  const el=document.getElementById('essayLectureAudio')||document.createElement('audio');
+  el.id='essayLectureAudio';
   // Never set crossOrigin/crossorigin on <audio>: iOS Safari rejects cross-origin 302 redirects when CORS mode is enabled.
   el.removeAttribute('crossorigin');
   el.preload='auto';
   el.playsInline=true;
   el.setAttribute('playsinline','');
   el.setAttribute('webkit-playsinline','');
+  el.style.display='none';
+  if(!el.isConnected&&document.body)document.body.appendChild(el);
   el.addEventListener('loadedmetadata',()=>{
     const sp=state.essaySpeech;
     if(sp.mode!=='mp3')return;

@@ -246,7 +246,8 @@ test('extractDriveFileId, buildDriveAudioUrls, resolveEssayAudioEntry, formatAud
     driveApiKey: 'AIzaManifestKey999',
     items: {
       '2021-1-0401-E1': {
-        directUrl: 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3',
+        directUrl: 'https://kisk44111.github.io/swq-audio-1/01-01.mp3',
+        releaseUrl: 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3',
         fileId: '1AbCdEfGhIjKlMnOpQr_12',
         title: '01-任務中心取向',
         subject: '社會工作'
@@ -258,8 +259,9 @@ test('extractDriveFileId, buildDriveAudioUrls, resolveEssayAudioEntry, formatAud
   const resolvedCdn = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E1');
   assert.ok(resolvedCdn);
   assert.equal(resolvedCdn.sourceKind, 'cdn');
-  assert.equal(resolvedCdn.urls[0], 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3');
-  assert.equal(resolvedCdn.urls[1], 'https://www.googleapis.com/drive/v3/files/1AbCdEfGhIjKlMnOpQr_12?alt=media&key=AIzaManifestKey999');
+  assert.equal(resolvedCdn.urls[0], 'https://kisk44111.github.io/swq-audio-1/01-01.mp3');
+  assert.equal(resolvedCdn.urls[1], 'https://github.com/kisk44111/social-worker-quiz-pwa/releases/download/audio-v1/01-01.mp3');
+  assert.equal(resolvedCdn.urls[2], 'https://www.googleapis.com/drive/v3/files/1AbCdEfGhIjKlMnOpQr_12?alt=media&key=AIzaManifestKey999');
 
   const resolvedApi = tools.resolveEssayAudioEntry(manifest, '2021-1-0401-E2');
   assert.ok(resolvedApi);

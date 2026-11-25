@@ -578,11 +578,13 @@
     if (!raw || typeof raw !== 'object') return null;
 
     const directUrl = isValidAudioUrl(raw.directUrl) ? String(raw.directUrl).trim() : '';
+    const releaseUrl = isValidAudioUrl(raw.releaseUrl) ? String(raw.releaseUrl).trim() : '';
     const fileId = extractDriveFileId(raw.fileId);
     const apiKey = String(raw.driveApiKey || manifest.driveApiKey || '').trim();
 
     const urls = [];
     if (directUrl) urls.push(directUrl);
+    if (releaseUrl && !urls.includes(releaseUrl)) urls.push(releaseUrl);
     if (fileId) {
       for (const u of buildDriveAudioUrls(fileId, apiKey)) {
         if (!urls.includes(u)) urls.push(u);
@@ -593,12 +595,13 @@
     return {
       questionId,
       directUrl,
+      releaseUrl,
       fileId,
       title: String(raw.title || ''),
       subject: String(raw.subject || ''),
       filename: String(raw.filename || ''),
       folder: String(raw.folder || ''),
-      sourceKind: directUrl ? 'cdn' : (apiKey ? 'driveApi' : 'driveWeb'),
+      sourceKind: directUrl ? 'cdn' : (releaseUrl ? 'cdn' : (apiKey ? 'driveApi' : 'driveWeb')),
       urls
     };
   }
